@@ -17,17 +17,35 @@ async function resolveUser(token) {
     return { id: p.id, email: p.email, role: p.role, name: p.name };
   } catch { /* no es JWT propio, probar Supabase */ }
 
-  // 2) Access token de Supabase Auth
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data?.user) return null;
-  const u = data.user;
+  // 2) Access token de Supabase Auth.
+  // Un fallo de verificación (token inválido/expirado) o un error transitorio
+  // de red NO deben propagarse como excepción: se devuelve null para que el
+  // llamador responda 401 en lugar de 500.
+  let authUser;
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data?.user) return null;
+    authUser = data.user;
+  } catch (err) {
+    console.error('[auth] getUser no disponible:', err?.message || err);
+    return null;
+  }
+  const u = authUser;
 
-  // Perfil en public.users (rol y estado operativo)
-  const { data: prof } = await supabase
-    .from('users')
-    .select('role, active, name')
-    .eq('id', u.id)
-    .maybeSingle();
+  // Perfil en public.users (rol y estado operativo).
+  // Si la consulta falla (p. ej. problema transitorio), seguimos con los datos
+  // del propio token de Supabase en lugar de romper la petición.
+  let prof = null;
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('role, active, name')
+      .eq('id', u.id)
+      .maybeSingle();
+    prof = data;
+  } catch (err) {
+    console.error('[auth] perfil no disponible:', err?.message || err);
+  }
 
   if (prof && prof.active === false) return null;
 

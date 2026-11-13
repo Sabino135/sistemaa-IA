@@ -9,16 +9,35 @@ function bearerToken(req) {
   return header.startsWith('Bearer ') ? header.slice(7) : null;
 }
 
+// Columnas legacy NOT NULL sin default que rompen el INSERT del perfil.
+// El mensaje de Postgres es: null value in column "X" of relation "users"
+// violates not-null constraint. Excluye las que ya enviamos en el payload.
+const KNOWN_COLUMNS = new Set(['id', 'name', 'email', 'role', 'active']);
+
+function legacyNotNullColumns(message = '') {
+  const match = /column "([^"]+)" of relation/i.exec(message);
+  if (!match) return [];
+  const col = match[1];
+  return KNOWN_COLUMNS.has(col) ? [] : [col];
+}
+
 // GET /api/auth/me — verifica el token (Supabase o JWT propio),
 // crea/actualiza el perfil en public.users y lo devuelve.
 router.get('/me', async (req, res) => {
+  // La verificación del token puede fallar por red o por sesión inválida:
+  // eso es un 401, nunca un 500.
+  let user;
   try {
     const token = bearerToken(req);
     if (!token) return res.status(401).json({ error: 'No autenticado' });
+    user = await resolveUser(token);
+  } catch (err) {
+    console.error('[auth/me] resolveUser', err);
+    return res.status(401).json({ error: 'No se pudo verificar la sesión' });
+  }
+  if (!user) return res.status(401).json({ error: 'Token inválido o expirado' });
 
-    const user = await resolveUser(token);
-    if (!user) return res.status(401).json({ error: 'Token inválido o expirado' });
-
+  try {
     // Upsert del perfil: primer login de un usuario de Supabase Auth
     const { data: existing, error: selErr } = await supabase
       .from('users')
@@ -41,14 +60,20 @@ router.get('/me', async (req, res) => {
         .insert(payload)
         .select(cols)
         .single();
-      // Esquemas antiguos aún tienen users.password_hash NOT NULL
-      // (el ALTER de schema.sql no se ha aplicado en esa base de datos)
-      if (error?.code === '23502' && error.message?.includes('password_hash')) {
-        ({ data: created, error } = await supabase
-          .from('users')
-          .insert({ ...payload, password_hash: 'x' })
-          .select(cols)
-          .single());
+      // Esquemas antiguos aún tienen columnas NOT NULL del sistema bcrypt
+      // anterior (p. ej. users.password_hash) porque el ALTER de schema.sql
+      // no se ha aplicado en esa base de datos. Reintentamos añadiendo las
+      // columnas legacy que falten, en lugar de fallar con 500.
+      if (error?.code === '23502') {
+        const legacy = legacyNotNullColumns(error.message);
+        if (legacy.length) {
+          const fill = Object.fromEntries(legacy.map(c => [c, 'x']));
+          ({ data: created, error } = await supabase
+            .from('users')
+            .insert({ ...payload, ...fill })
+            .select(cols)
+            .single());
+        }
       }
       if (error) throw error;
       return res.json(created);
