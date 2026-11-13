@@ -7,6 +7,9 @@ export const sessionReady = writable(false);
 export const passwordRecovery = writable(false);
 export const route = writable(window.location.hash.replace(/^#/, '') || '/');
 
+let lastPasswordResetAt = 0;
+const PASSWORD_RESET_COOLDOWN_MS = 60_000;
+
 window.addEventListener('hashchange', () => {
   route.set(window.location.hash.replace(/^#/, '') || '/');
 });
@@ -67,10 +70,22 @@ export async function loginWithEmail(email, password) {
 }
 
 export async function resetPassword(email) {
+  const now = Date.now();
+  const remainingMs = PASSWORD_RESET_COOLDOWN_MS - (now - lastPasswordResetAt);
+  if (remainingMs > 0) {
+    throw new Error(`Por seguridad, espera ${Math.ceil(remainingMs / 1000)} segundos antes de solicitar otro enlace.`);
+  }
+  lastPasswordResetAt = now;
+
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.origin + '/'
   });
-  if (error) throw error;
+  if (error) {
+    if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
+      throw new Error('Supabase limitó el envío de correos de recuperación. Espera al menos 60 segundos o configura un SMTP propio en Supabase.');
+    }
+    throw error;
+  }
 }
 
 export async function completePasswordReset(newPassword) {
