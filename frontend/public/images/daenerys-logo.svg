@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Daenerys Burgers & Burritos">
+  <!-- fondo -->
+  <circle cx="200" cy="200" r="196" fill="#FFF4E4"/>
+  <circle cx="200" cy="200" r="184" fill="none" stroke="#2B1B12" stroke-width="6"/>
+  <circle cx="200" cy="200" r="172" fill="none" stroke="#D9A441" stroke-width="3" stroke-dasharray="4 10"/>
+
+  <!-- corona (Daenerys) -->
+  <g transform="translate(200,58)">
+    <path d="M-42,26 L-42,-6 L-22,8 L0,-22 L22,8 L42,-6 L42,26 Z"
+          fill="#D9A441" stroke="#2B1B12" stroke-width="5" stroke-linejoin="round"/>
+    <circle cx="0" cy="-30" r="7" fill="#D64541" stroke="#2B1B12" stroke-width="4"/>
+    <circle cx="-42" cy="-12" r="6" fill="#4C9A2A" stroke="#2B1B12" stroke-width="4"/>
+    <circle cx="42" cy="-12" r="6" fill="#4C9A2A" stroke="#2B1B12" stroke-width="4"/>
+  </g>
+
+  <!-- nombre -->
+  <text x="200" y="196" text-anchor="middle"
+        font-family="Arial Black, Arial, sans-serif" font-weight="900"
+        font-size="62" letter-spacing="4" fill="#2B1B12">DAENERYS</text>
+
+  <!-- divisor -->
+  <g transform="translate(200,216)">
+    <line x1="-110" y1="0" x2="-26" y2="0" stroke="#D64541" stroke-width="5" stroke-linecap="round"/>
+    <line x1="26" y1="0" x2="110" y2="0" stroke="#D64541" stroke-width="5" stroke-linecap="round"/>
+    <path d="M0,-9 L2.6,-2.6 L9,0 L2.6,2.6 L0,9 L-2.6,2.6 L-9,0 L-2.6,-2.6 Z" fill="#D9A441"/>
+  </g>
+
+  <!-- subtítulo -->
+  <text x="200" y="262" text-anchor="middle"
+        font-family="Arial, sans-serif" font-weight="700"
+        font-size="24" letter-spacing="6" fill="#B3541E">BURGERS &amp; BURRITOS</text>
+
+  <!-- hamburguesa -->
+  <g transform="translate(200,318)">
+    <!-- pan superior -->
+    <path d="M-58,-14 C-58,-44 -30,-58 0,-58 C30,-58 58,-44 58,-14
+             Q58,-4 48,-4 L-48,-4 Q-58,-4 -58,-14 Z" fill="#E9A13B" stroke="#2B1B12" stroke-width="5"/>
+    <!-- semillas -->
+    <g fill="#FFF4E4" stroke="#2B1B12" stroke-width="3">
+      <ellipse cx="-28" cy="-34" rx="6" ry="4" transform="rotate(-20 -28 -34)"/>
+      <ellipse cx="0" cy="-44" rx="6" ry="4"/>
+      <ellipse cx="28" cy="-34" rx="6" ry="4" transform="rotate(20 28 -34)"/>
+    </g>
+    <!-- lechuga -->
+    <path d="M-60,-2 q10,-10 20,0 q10,-10 20,0 q10,-10 20,0 q10,-10 20,0 q10,-10 20,0 q10,-10 20,0
+             L60,10 L-60,10 Z" fill="#4C9A2A" stroke="#2B1B12" stroke-width="5" stroke-linejoin="round"/>
+    <!-- carne -->
+    <rect x="-60" y="10" width="120" height="16" rx="8" fill="#7A3B1E" stroke="#2B1B12" stroke-width="5"/>
+    <!-- pan inferior -->
+    <path d="M-58,26 C-58,40 -30,48 0,48 C30,48 58,40 58,26
+             L58,36 C58,48 30,58 0,58 C-30,58 -58,48 -58,36 Z" fill="#E9A13B" stroke="#2B1B12" stroke-width="5" stroke-linejoin="round"/>
+  </g>
+</svg>

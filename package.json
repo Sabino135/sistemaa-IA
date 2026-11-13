@@ -1,0 +1,19 @@
+{
+  "name": "sistema-ia-pos",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Sistema integral de administración y punto de venta (Svelte + Node.js + Supabase)",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "build": "npm run build -w frontend",
+    "start": "npm run start -w backend"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
