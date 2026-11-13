@@ -188,3 +188,8 @@ alter table geofence_events enable row level security;
 -- estos ALTER son idempotentes y corrigen el esquema anterior)
 -- ============================================================
 alter table products alter column price drop not null;
+
+-- La autenticación migró a Supabase Auth: la columna password_hash
+-- (del sistema bcrypt anterior) ya no se usa y rompía el INSERT
+-- de GET /api/auth/me con error 23502 (NOT NULL violation).
+alter table users drop column if exists password_hash;

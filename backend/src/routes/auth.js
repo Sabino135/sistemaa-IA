@@ -20,11 +20,12 @@ router.get('/me', async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Token inválido o expirado' });
 
     // Upsert del perfil: primer login de un usuario de Supabase Auth
-    const { data: existing } = await supabase
+    const { data: existing, error: selErr } = await supabase
       .from('users')
       .select('id, name, email, role, active, created_at')
       .eq('id', user.id)
       .maybeSingle();
+    if (selErr) throw selErr;
 
     if (!existing) {
       const { data: created, error } = await supabase
