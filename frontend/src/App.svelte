@@ -1,9 +1,10 @@
 <script>
   import './app.css';
   import { onMount } from 'svelte';
-  import { route, user, sessionReady, logout, initAuth, onAuthChange, navigate } from './lib/store';
+  import { route, user, sessionReady, passwordRecovery, logout, initAuth, onAuthChange, navigate } from './lib/store';
   import { api } from './lib/api';
   import Login from './pages/Login.svelte';
+  import ResetPassword from './pages/ResetPassword.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import POS from './pages/POS.svelte';
   import Sales from './pages/Sales.svelte';
@@ -86,6 +87,8 @@
 
 {#if !$sessionReady}
   <div class="login-wrap muted">Cargando…</div>
+{:else if $passwordRecovery}
+  <ResetPassword />
 {:else if isLogin || !loggedIn}
   <Login />
 {:else}

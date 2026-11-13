@@ -28,17 +28,28 @@ router.get('/me', async (req, res) => {
     if (selErr) throw selErr;
 
     if (!existing) {
-      const { data: created, error } = await supabase
+      const payload = {
+        id: user.id,
+        name: user.name || user.email,
+        email: user.email,
+        role: 'cajero',
+        active: true
+      };
+      const cols = 'id, name, email, role, active, created_at';
+      let { data: created, error } = await supabase
         .from('users')
-        .insert({
-          id: user.id,
-          name: user.name || user.email,
-          email: user.email,
-          role: 'cajero',
-          active: true
-        })
-        .select('id, name, email, role, active, created_at')
+        .insert(payload)
+        .select(cols)
         .single();
+      // Esquemas antiguos aún tienen users.password_hash NOT NULL
+      // (el ALTER de schema.sql no se ha aplicado en esa base de datos)
+      if (error?.code === '23502' && error.message?.includes('password_hash')) {
+        ({ data: created, error } = await supabase
+          .from('users')
+          .insert({ ...payload, password_hash: 'x' })
+          .select(cols)
+          .single());
+      }
       if (error) throw error;
       return res.json(created);
     }

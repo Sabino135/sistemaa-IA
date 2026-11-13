@@ -4,6 +4,7 @@ import { api } from './api';
 
 export const user = writable(null);
 export const sessionReady = writable(false);
+export const passwordRecovery = writable(false);
 export const route = writable(window.location.hash.replace(/^#/, '') || '/');
 
 window.addEventListener('hashchange', () => {
@@ -38,6 +39,9 @@ export function onAuthChange(callback) {
       if (session) await fetchProfile();
     } else if (event === 'SIGNED_OUT') {
       user.set(null);
+      passwordRecovery.set(false);
+    } else if (event === 'PASSWORD_RECOVERY') {
+      passwordRecovery.set(true);
     }
     callback?.(event, session);
   });
@@ -67,6 +71,14 @@ export async function resetPassword(email) {
     redirectTo: window.location.origin + '/'
   });
   if (error) throw error;
+}
+
+export async function completePasswordReset(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+  passwordRecovery.set(false);
+  await fetchProfile();
+  navigate('/dashboard');
 }
 
 export async function registerWithEmail(name, email, password) {
