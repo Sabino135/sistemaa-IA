@@ -3,16 +3,19 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') }); //
 require('dotenv').config({ path: path.join(__dirname, '..', '.env'), override: true }); // backend/.env tiene prioridad
 
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
-const required = ['SUPABASE_URL', 'JWT_SECRET'];
-for (const key of required) {
+// No hacemos process.exit(1): en Vercel el backend corre como función
+// serverless y un exit durante el arranque se traduce en errores 500 sin
+// diagnóstico. Acumulamos los faltantes y la app responde 503 descriptivo.
+const missingEnv = [];
+for (const key of ['SUPABASE_URL', 'JWT_SECRET']) {
   if (!process.env[key]) {
     console.error(`[env] Falta la variable de entorno requerida: ${key}`);
-    process.exit(1);
+    missingEnv.push(key);
   }
 }
 if (!serviceRoleKey) {
   console.error('[env] Falta la variable de entorno requerida: SUPABASE_SERVICE_ROLE_KEY');
-  process.exit(1);
+  missingEnv.push('SUPABASE_SERVICE_ROLE_KEY');
 }
 
 function jwtPayload(token) {
@@ -23,17 +26,20 @@ function jwtPayload(token) {
   }
 }
 
-const serviceRole = jwtPayload(serviceRoleKey)?.role;
-const isPublishableKey = serviceRoleKey.startsWith('sb_publishable_')
-  || serviceRoleKey === process.env.SUPABASE_ANON_KEY
-  || serviceRoleKey === process.env.VITE_SUPABASE_ANON_KEY;
-if (isPublishableKey || (serviceRole && serviceRole !== 'service_role')) {
+const serviceRole = serviceRoleKey ? jwtPayload(serviceRoleKey)?.role : null;
+const keyStr = serviceRoleKey || '';
+const isPublishableKey = keyStr.startsWith('sb_publishable_')
+  || (!!process.env.SUPABASE_ANON_KEY && keyStr === process.env.SUPABASE_ANON_KEY)
+  || (!!process.env.VITE_SUPABASE_ANON_KEY && keyStr === process.env.VITE_SUPABASE_ANON_KEY);
+const badServiceRole = serviceRole && serviceRole !== 'service_role';
+if (serviceRoleKey && (isPublishableKey || badServiceRole)) {
   console.error('[env] SUPABASE_SERVICE_ROLE_KEY debe ser la service_role/secret key de Supabase, no la anon/publishable key.');
-  process.exit(1);
+  missingEnv.push('SUPABASE_SERVICE_ROLE_KEY (inválida: se configuró la anon/publishable key)');
 }
 
 module.exports = {
   env: process.env.NODE_ENV || 'development',
+  missingEnv,
   port: parseInt(process.env.PORT || '3000', 10),
   supabase: {
     url: process.env.SUPABASE_URL,

@@ -18,10 +18,16 @@ function loadBalancer(maxConcurrent) {
   }
 
   return function (req, res, next) {
+    let released = false;
+    function done() {
+      if (released) return;
+      released = true;
+      release();
+    }
     function run() {
       active++;
-      res.on('finish', release);
-      res.on('close', release);
+      res.on('finish', done);
+      res.on('close', done);
       next();
     }
 

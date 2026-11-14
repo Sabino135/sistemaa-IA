@@ -23,6 +23,19 @@ app.use(rateLimit({
 }));
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+
+// Configuración incompleta (variables de entorno faltantes en Vercel):
+// respondemos 503 con el detalle en lugar de dejar que cada ruta explote.
+app.use('/api', (req, res, next) => {
+  if (config.missingEnv?.length) {
+    return res.status(503).json({
+      error: 'Backend mal configurado: faltan variables de entorno',
+      missing: config.missingEnv
+    });
+  }
+  next();
+});
+
 app.use('/api', routes);
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));

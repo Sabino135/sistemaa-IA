@@ -37,6 +37,18 @@ router.get('/me', async (req, res) => {
   }
   if (!user) return res.status(401).json({ error: 'Token inválido o expirado' });
 
+  // Si la sincronización del perfil en public.users falla (p. ej. error
+  // transitorio de Supabase), respondemos 200 con los datos del propio token
+  // en lugar de un 500: el usuario está autenticado y puede trabajar; el
+  // perfil se reintentará en la próxima llamada.
+  const fallbackProfile = {
+    id: user.id,
+    name: user.name || user.email,
+    email: user.email,
+    role: user.role || 'cajero',
+    active: true
+  };
+
   try {
     // Upsert del perfil: primer login de un usuario de Supabase Auth
     const { data: existing, error: selErr } = await supabase
@@ -89,7 +101,7 @@ router.get('/me', async (req, res) => {
     res.json(existing);
   } catch (err) {
     console.error('[auth/me]', err);
-    res.status(500).json({ error: 'Error al obtener el perfil' });
+    res.json(fallbackProfile);
   }
 });
 
