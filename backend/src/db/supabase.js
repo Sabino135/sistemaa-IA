@@ -5,8 +5,13 @@ const config = require('../config');
 // Vercel), createClient lanzaría una excepción al cargar el módulo y todas
 // las rutas devolverían 500 sin diagnóstico. Exportamos un stub que falla
 // de forma controlada: la app responde 503 vía middleware de config.
-const configured = config.supabase.url && config.supabase.serviceRoleKey
-  && !config.missingEnv.includes('SUPABASE_SERVICE_ROLE_KEY (inválida: se configuró la anon/publishable key)');
+// Cualquier problema de configuración de Supabase (variable ausente, clave
+// anon en vez de service_role, proyecto distinto entre URL y clave, o
+// backend apuntando a un proyecto distinto del frontend) debe producir el
+// stub: la app responde 503 con el detalle en missingEnv en lugar de un
+// 401 engañoso al verificar sesiones.
+const supabaseMisconfigured = config.missingEnv.some(m => m.startsWith('SUPABASE'));
+const configured = config.supabase.url && config.supabase.serviceRoleKey && !supabaseMisconfigured;
 
 const supabase = configured
   ? createClient(config.supabase.url, config.supabase.serviceRoleKey, {

@@ -22,7 +22,16 @@ app.use(rateLimit({
   message: { error: 'Demasiadas peticiones, intente más tarde' }
 }));
 
-app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+// Health check público: incluye el estado de configuración (sin secretos)
+// para poder diagnosticar en Vercel qué proyecto Supabase está usando el
+// backend y qué variables faltan. missingEnv solo contiene nombres.
+app.get('/api/health', (req, res) => res.json({
+  ok: true,
+  configured: !(config.missingEnv && config.missingEnv.length),
+  supabaseProject: config.supabase.projectRef || null,
+  missingEnv: config.missingEnv || [],
+  ts: new Date().toISOString()
+}));
 
 // Configuración incompleta (variables de entorno faltantes en Vercel):
 // respondemos 503 con el detalle en lugar de dejar que cada ruta explote.
