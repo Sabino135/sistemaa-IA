@@ -27,6 +27,15 @@ function jwtPayload(token) {
 }
 
 const serviceRole = serviceRoleKey ? jwtPayload(serviceRoleKey)?.role : null;
+const keyRef = serviceRoleKey ? jwtPayload(serviceRoleKey)?.ref : null;
+const urlRef = (() => {
+  try { return new URL(process.env.SUPABASE_URL || '').hostname.split('.')[0]; }
+  catch { return null; }
+})();
+if (serviceRoleKey && keyRef && urlRef && keyRef !== urlRef) {
+  console.error(`[env] SUPABASE_SERVICE_ROLE_KEY pertenece al proyecto "${keyRef}" pero SUPABASE_URL apunta a "${urlRef}".`);
+  missingEnv.push('SUPABASE_SERVICE_ROLE_KEY (no corresponde al proyecto de SUPABASE_URL)');
+}
 const keyStr = serviceRoleKey || '';
 const isPublishableKey = keyStr.startsWith('sb_publishable_')
   || (!!process.env.SUPABASE_ANON_KEY && keyStr === process.env.SUPABASE_ANON_KEY)

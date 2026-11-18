@@ -15,11 +15,17 @@ export async function api(path, { method = 'GET', body } = {}) {
   });
   const data2 = await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (res.status === 401) {
-      await supabase.auth.signOut();
-      window.location.hash = '#/login';
+    // Solo cerrar sesión si enviamos un token y el backend lo rechazó.
+    // Un 401 sin token no debe disparar signOut ni redirecciones en bucle.
+    if (res.status === 401 && token) {
+      try { await supabase.auth.signOut(); } catch { /* sesión ya inválida */ }
+      if (!window.location.hash.startsWith('#/login')) {
+        window.location.hash = '#/login';
+      }
     }
-    throw new Error(data2.error || `Error ${res.status}`);
+    const err = new Error(data2.error || `Error ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return data2;
 }

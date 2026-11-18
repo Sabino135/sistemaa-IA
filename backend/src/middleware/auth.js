@@ -14,7 +14,9 @@ async function resolveUser(token) {
   // 1) JWT propio (sistema legacy con bcrypt)
   try {
     const p = jwt.verify(token, config.jwt.secret);
-    return { id: p.id, email: p.email, role: p.role, name: p.name };
+    // Un JWT válido sin `id`/`sub` no identifica a ningún usuario.
+    if (!p.id && !p.sub) return null;
+    return { id: p.id || p.sub, email: p.email, role: p.role, name: p.name };
   } catch { /* no es JWT propio, probar Supabase */ }
 
   // 2) Access token de Supabase Auth.
@@ -24,7 +26,12 @@ async function resolveUser(token) {
   let authUser;
   try {
     const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data?.user) return null;
+    if (error || !data?.user) {
+      // Diagnóstico en los logs de Vercel: si la service key no corresponde
+      // al proyecto o es inválida, aquí se verá el motivo del 401.
+      if (error) console.warn('[auth] getUser rechazó el token:', error.message || error);
+      return null;
+    }
     authUser = data.user;
   } catch (err) {
     console.error('[auth] getUser no disponible:', err?.message || err);

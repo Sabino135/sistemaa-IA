@@ -18,15 +18,29 @@ export function navigate(path) {
   window.location.hash = '#' + path;
 }
 
+let profileRequest = null;
+let lastProfileError = null;
+
+// Dedup: SIGNED_IN y loginWithEmail pueden disparar fetchProfile a la vez;
+// sin esto se generan llamadas duplicadas a /api/auth/me.
 async function fetchProfile() {
-  try {
-    const me = await api('/auth/me');
-    user.set(me);
-    return me;
-  } catch {
-    user.set(null);
-    return null;
+  if (!profileRequest) {
+    profileRequest = (async () => {
+      try {
+        const me = await api('/auth/me');
+        user.set(me);
+        lastProfileError = null;
+        return me;
+      } catch (err) {
+        user.set(null);
+        lastProfileError = err;
+        return null;
+      } finally {
+        profileRequest = null;
+      }
+    })();
   }
+  return profileRequest;
 }
 
 export async function initAuth() {
@@ -65,7 +79,17 @@ export async function loginWithGoogle() {
 export async function loginWithEmail(email, password) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
-  await fetchProfile();
+  const me = await fetchProfile();
+  if (!me) {
+    // Credenciales válidas en Supabase pero el backend no pudo verificar
+    // el token (p. ej. variables de entorno incorrectas en Vercel).
+    // Mostramos el error real en lugar de rebotar en silencio al login.
+    if (lastProfileError?.status === 401) {
+      await supabase.auth.signOut();
+      throw new Error('Sesión iniciada pero el servidor no pudo verificarla. Revisa la configuración del backend (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY).');
+    }
+    throw lastProfileError || new Error('No se pudo conectar con el servidor.');
+  }
   navigate('/dashboard');
 }
 
