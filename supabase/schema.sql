@@ -297,3 +297,126 @@ alter table order_items enable row level security;
 -- Fila única de configuración (el backend la crea/actualiza; aquí aseguramos
 -- que exista una por defecto sin sobrescribir valores ya configurados).
 insert into store_settings (id) values (1) on conflict (id) do nothing;
+
+-- ============================================================
+-- INTEGRACIÓN POS ↔ TIENDA WEB + MEJORAS (Fase 2)
+-- Todo idempotente: seguro ejecutar sobre bases existentes.
+-- ============================================================
+
+-- Ventas: idempotencia de caja (evita duplicados por doble submit)
+alter table sales add column if not exists client_ref text;
+create unique index if not exists idx_sales_client_ref on sales(client_ref) where client_ref is not null;
+
+-- Trazabilidad: si la venta descontó stock en negativo por autorización admin
+alter table sales add column if not exists allow_negative_stock boolean not null default false;
+
+-- Enlace pedido web -> venta POS generada al entregarse
+alter table sales add column if not exists order_id uuid references orders(id) on delete set null;
+alter table orders add column if not exists sale_id uuid references sales(id) on delete set null;
+create index if not exists idx_orders_sale on orders(sale_id);
+
+-- Costo del producto (para utilidad real en reportes)
+alter table products add column if not exists cost numeric(10,2) not null default 0 check (cost >= 0);
+
+-- Comprobante de gasto
+alter table expenses add column if not exists receipt_url text;
+
+-- Categoría/condición de pedido web para distinguir canal en reportes
+alter table sales add column if not exists source text not null default 'pos' check (source in ('pos','web'));
+
+-- ------------------------------------------------------------
+-- Zonas de entrega: polígonos geográficos con tarifa propia.
+-- Distinto de `geofences` (que es para tracking de empleados).
+-- ------------------------------------------------------------
+create table if not exists delivery_zones (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  geometry jsonb not null,           -- { points: [[lat,lng],...] } (polígono)
+  delivery_fee numeric(10,2) not null default 0 check (delivery_fee >= 0),
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table delivery_zones enable row level security;
+
+-- ------------------------------------------------------------
+-- Descuento atómico de inventario por venta.
+-- Ejecuta en UNA transacción: verifica stock (SELECT ... FOR UPDATE),
+-- descuenta y registra movimientos. Si falta stock lanza excepción y
+-- no queda ningún cambio parcial. p_allow_negative solo lo activa el
+-- backend cuando un admin lo autorizó expresamente.
+-- ------------------------------------------------------------
+create or replace function deduct_sale_stock(
+  p_sale_id uuid,
+  p_allow_negative boolean default false,
+  p_user_id uuid default null
+)
+returns void
+language plpgsql
+as $$
+declare
+  r record;
+  v_stock numeric;
+  v_name text;
+  v_sale_user uuid;
+begin
+  select user_id into v_sale_user from sales where id = p_sale_id;
+  if v_sale_user is null then
+    raise exception 'sale_not_found';
+  end if;
+
+  for r in
+    select ri.ingredient_id,
+           sum(ri.quantity * si.quantity) as needed
+    from sale_items si
+    join recipes ri on ri.product_id = si.product_id
+    where si.sale_id = p_sale_id
+    group by ri.ingredient_id
+  loop
+    select stock, name into v_stock, v_name
+    from ingredients where id = r.ingredient_id for update;
+    if not found then
+      continue;
+    end if;
+    if v_stock - r.needed < 0 and not p_allow_negative then
+      raise exception 'insufficient_stock:%:%', v_name, r.needed;
+    end if;
+    update ingredients set stock = stock - r.needed where id = r.ingredient_id;
+    insert into inventory_movements (ingredient_id, quantity, type, reason, reference_id, user_id)
+    values (r.ingredient_id, -r.needed, 'sale',
+            'Venta #' || left(p_sale_id::text, 8), p_sale_id,
+            coalesce(p_user_id, v_sale_user));
+  end loop;
+end;
+$$;
+
+-- Reintegro atómico de inventario al cancelar una venta
+create or replace function restock_sale(p_sale_id uuid, p_user_id uuid default null)
+returns void
+language plpgsql
+as $$
+declare
+  r record;
+  v_sale_user uuid;
+begin
+  select user_id into v_sale_user from sales where id = p_sale_id;
+  for r in
+    select ri.ingredient_id,
+           sum(ri.quantity * si.quantity) as qty
+    from sale_items si
+    join recipes ri on ri.product_id = si.product_id
+    where si.sale_id = p_sale_id
+    group by ri.ingredient_id
+  loop
+    update ingredients set stock = stock + r.qty where id = r.ingredient_id;
+    insert into inventory_movements (ingredient_id, quantity, type, reason, reference_id, user_id)
+    values (r.ingredient_id, r.qty, 'adjustment',
+            'Cancelación venta #' || left(p_sale_id::text, 8), p_sale_id,
+            coalesce(p_user_id, v_sale_user));
+  end loop;
+end;
+$$;
+
+-- Control de inventario por producto: si es true, el POS valida existencias
+-- (vía receta) y bloquea la venta sin stock salvo override de admin.
+-- Productos sin receta con track_inventory=true no se pueden vender.
+alter table products add column if not exists track_inventory boolean not null default true;

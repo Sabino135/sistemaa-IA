@@ -8,6 +8,8 @@
   import Dashboard from './pages/Dashboard.svelte';
   import POS from './pages/POS.svelte';
   import Sales from './pages/Sales.svelte';
+  import Orders from './pages/Orders.svelte';
+  import StoreApp from './pages/store/StoreApp.svelte';
   import Products from './pages/Products.svelte';
   import Categories from './pages/Categories.svelte';
   import Inventory from './pages/Inventory.svelte';
@@ -25,6 +27,7 @@
     '/dashboard': Dashboard,
     '/pos': POS,
     '/sales': Sales,
+    '/orders': Orders,
     '/products': Products,
     '/categories': Categories,
     '/inventory': Inventory,
@@ -40,7 +43,8 @@
   const NAV = [
     { path: '/dashboard', label: 'Dashboard', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', roles: null },
     { path: '/pos', label: 'Punto de venta', icon: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM9 7h6M9 11h6M9 15h4', roles: null },
-    { path: '/sales', label: 'Pedidos', icon: 'M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 1zM8 7h8M8 11h8', roles: null },
+    { path: '/sales', label: 'Ventas', icon: 'M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 1zM8 7h8M8 11h8', roles: null },
+    { path: '/orders', label: 'Pedidos web', icon: 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0', roles: ['admin', 'cajero'] },
     { path: '/products', label: 'Productos', icon: 'M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8', roles: null },
     { path: '/categories', label: 'Categorías', icon: 'M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01', roles: null },
     { path: '/inventory', label: 'Inventario y recetas', icon: 'M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM9 21V12h6v9', roles: ['admin', 'inventario'] },
@@ -55,6 +59,8 @@
   const ROLE_LABELS = { admin: 'Administrador', cajero: 'Cajero', inventario: 'Inventario' };
 
   $: current = $route.split('?')[0] || '/';
+  // La tienda online y el rastreo de pedidos son públicos (no requieren login)
+  $: isPublicStore = current.startsWith('/tienda') || current.startsWith('/pedido');
   $: Page = pages[current] || Dashboard;
   $: isLogin = current === '/login';
   $: loggedIn = !!$user;
@@ -71,9 +77,9 @@
     });
     await initAuth();
     if ($user && (isLogin || current === '/')) navigate('/dashboard');
-    if (!$user && !isLogin && current !== '/') navigate('/login');
+    if (!$user && !isLogin && current !== '/' && !isPublicStore) navigate('/login');
     if (current === '/' && !$user) navigate('/login');
-    if ($user) loadAlerts();
+    if ($user && !isPublicStore) loadAlerts();
     return unsub;
   });
 
@@ -89,6 +95,8 @@
   <div class="login-wrap muted">Cargando…</div>
 {:else if $passwordRecovery}
   <ResetPassword />
+{:else if isPublicStore}
+  <StoreApp />
 {:else if isLogin || !loggedIn}
   <Login />
 {:else}

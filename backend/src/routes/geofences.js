@@ -1,10 +1,10 @@
 const express = require('express');
 const { supabase } = require('../db/supabase');
-const { authRequired } = require('../middleware/auth');
+const { staffRequired, roleOnly } = require('../middleware/auth');
 const { crudRouter } = require('./crud');
 
 const router = express.Router();
-router.use(authRequired);
+router.use(staffRequired);
 
 // Distancia en metros entre dos coordenadas [lat, lng] (fórmula de Haversine)
 function distanceM([lat1, lng1], [lat2, lng2]) {
@@ -167,6 +167,15 @@ router.post('/track', async (req, res) => {
     console.error('[geofences] track', err);
     res.status(500).json({ error: 'Error al registrar geocercas' });
   }
+});
+
+// La configuración de geocercas es administrativa; el tracking y el check
+// de punto quedan disponibles para todo el personal.
+router.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return roleOnly('admin')(req, res, next);
+  }
+  next();
 });
 
 router.use(crudRouter({

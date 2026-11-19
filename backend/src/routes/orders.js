@@ -1,15 +1,89 @@
 const { supabase } = require('../db/supabase');
 const express = require('express');
-const { authRequired } = require('../middleware/auth');
+const { staffRequired, roleOnly } = require('../middleware/auth');
 const { getSettings } = require('./store');
 
 const router = express.Router();
-router.use(authRequired);
+router.use(staffRequired);
+const ordersWrite = roleOnly('admin', 'cajero');
+const settingsWrite = roleOnly('admin');
 
 const ORDER_STATUSES = ['received', 'preparing', 'ready', 'on_the_way', 'delivered', 'cancelled'];
 const PAYMENT_STATUSES = ['pending', 'paid', 'rejected', 'cancelled', 'refunded'];
+// sales.payment_method solo admite cash/card/transfer; Mercado Pago se
+// registra como 'card' (cobro plástico/en línea) en la venta interna.
+const SALE_PAYMENT_MAP = { mercadopago: 'card', transfer: 'transfer', cash: 'cash' };
 
-// GET /api/orders — lista de pedidos web (admin), con filtros por estado.
+// Convierte un pedido web entregado en venta POS + descuento de inventario.
+// Idempotente: si el pedido ya tiene sale_id, no hace nada.
+async function fulfillOrder(order, req, allowNegative) {
+  if (order.sale_id) return { sale_id: order.sale_id, already: true };
+
+  const { data: items, error: iErr } = await supabase
+    .from('order_items').select('*').eq('order_id', order.id);
+  if (iErr) throw iErr;
+  if (!items || items.length === 0) throw new Error('El pedido no tiene items');
+
+  const { data: sale, error: sErr } = await supabase
+    .from('sales')
+    .insert({
+      customer_id: order.customer_id || null,
+      user_id: req.user.id,
+      subtotal: Number(order.subtotal) || 0,
+      tax: Number(order.tax) || 0,
+      total: Number(order.total) || 0,
+      payment_method: SALE_PAYMENT_MAP[order.payment_method] || 'cash',
+      status: 'completed',
+      notes: `Pedido web #${order.order_number ?? order.id.slice(0, 8)}`,
+      order_id: order.id,
+      source: 'web',
+      allow_negative_stock: allowNegative === true
+    })
+    .select('id').single();
+  if (sErr) throw sErr;
+
+  const { error: siErr } = await supabase.from('sale_items').insert(
+    items.map(i => ({
+      sale_id: sale.id,
+      product_id: i.product_id,
+      quantity: i.quantity,
+      unit_price: i.unit_price,
+      total: i.total
+    }))
+  );
+  if (siErr) {
+    await supabase.from('sales').delete().eq('id', sale.id);
+    throw siErr;
+  }
+
+  const { error: rpcErr } = await supabase.rpc('deduct_sale_stock', {
+    p_sale_id: sale.id,
+    p_allow_negative: allowNegative === true,
+    p_user_id: req.user.id
+  });
+  if (rpcErr) {
+    await supabase.from('sale_items').delete().eq('sale_id', sale.id);
+    await supabase.from('sales').delete().eq('id', sale.id);
+    const e = new Error(rpcErr.message);
+    e.code = /insufficient_stock/.test(rpcErr.message || '') ? 'INSUFFICIENT_STOCK' : 'RPC_ERROR';
+    throw e;
+  }
+
+  await supabase.from('orders').update({ sale_id: sale.id }).eq('id', order.id);
+  return { sale_id: sale.id, already: false };
+}
+
+// Revierte la venta generada por un pedido (cancelación)
+async function revertFulfillment(order, req) {
+  if (!order.sale_id) return;
+  const { data: sale } = await supabase.from('sales').select('id, status').eq('id', order.sale_id).maybeSingle();
+  if (sale && sale.status !== 'cancelled') {
+    await supabase.rpc('restock_sale', { p_sale_id: sale.id, p_user_id: req.user.id });
+    await supabase.from('sales').update({ status: 'cancelled' }).eq('id', sale.id);
+  }
+}
+
+// GET /api/orders — lista de pedidos web (admin), con filtros.
 router.get('/', async (req, res) => {
   try {
     let q = supabase
@@ -19,6 +93,12 @@ router.get('/', async (req, res) => {
       .limit(300);
     if (req.query.status) q = q.eq('status', req.query.status);
     if (req.query.payment_status) q = q.eq('payment_status', req.query.payment_status);
+    if (req.query.payment_method) q = q.eq('payment_method', req.query.payment_method);
+    if (req.query.delivery_method) q = q.eq('delivery_method', req.query.delivery_method);
+    if (req.query.from) q = q.gte('created_at', req.query.from);
+    if (req.query.to) q = q.lte('created_at', req.query.to + 'T23:59:59');
+    if (req.query.q) q = q.or(`customer_name.ilike.%${req.query.q}%,customer_phone.ilike.%${req.query.q}%`);
+    if (req.query.customer_id) q = q.eq('customer_id', req.query.customer_id);
     const { data, error } = await q;
     if (error) throw error;
     res.json(data);
@@ -38,7 +118,7 @@ router.get('/settings', async (req, res) => {
 });
 
 // PUT /api/orders/settings — actualizar configuración de la tienda (admin)
-router.put('/settings', async (req, res) => {
+router.put('/settings', settingsWrite, async (req, res) => {
   try {
     const allowed = [
       'store_name', 'store_tagline', 'logo_url', 'phone', 'whatsapp', 'address',
@@ -72,13 +152,40 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/orders/:id/status — cambia SOLO el estado del pedido.
-router.put('/:id/status', async (req, res) => {
+// PUT /api/orders/:id/status — cambia el estado del pedido.
+// Al marcar 'delivered' genera la venta POS + descuento de inventario
+// (una sola vez, vía orders.sale_id). Al cancelar, revierte la venta.
+router.put('/:id/status', ordersWrite, async (req, res) => {
   try {
-    const { status } = req.body || {};
+    const { status, allow_negative_stock } = req.body || {};
     if (!ORDER_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Estado de pedido inválido' });
     }
+    const override = allow_negative_stock === true && req.user.role === 'admin';
+
+    const { data: order, error: fErr } = await supabase
+      .from('orders').select('*').eq('id', req.params.id).maybeSingle();
+    if (fErr) throw fErr;
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    if (status === 'delivered' && order.status !== 'delivered' && !order.sale_id) {
+      try {
+        await fulfillOrder(order, req, override);
+      } catch (e) {
+        if (e.code === 'INSUFFICIENT_STOCK') {
+          return res.status(409).json({
+            error: 'Stock insuficiente para surtir el pedido. Ajusta inventario o autoriza la venta en negativo (solo admin).',
+            requires_override: true
+          });
+        }
+        throw e;
+      }
+    }
+
+    if (status === 'cancelled' && order.status !== 'cancelled') {
+      await revertFulfillment(order, req);
+    }
+
     const { data, error } = await supabase
       .from('orders')
       .update({ status, updated_at: new Date().toISOString() })
@@ -92,7 +199,7 @@ router.put('/:id/status', async (req, res) => {
 });
 
 // PUT /api/orders/:id/payment — cambia SOLO el estado del pago.
-router.put('/:id/payment', async (req, res) => {
+router.put('/:id/payment', ordersWrite, async (req, res) => {
   try {
     const { payment_status } = req.body || {};
     if (!PAYMENT_STATUSES.includes(payment_status)) {

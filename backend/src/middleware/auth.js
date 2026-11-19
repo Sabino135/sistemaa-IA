@@ -83,4 +83,39 @@ async function authRequired(req, res, next) {
   }
 }
 
-module.exports = { signToken, resolveUser, authRequired };
+// Roles considerados "personal del negocio". Los compradores de la tienda
+// ('cliente') pueden autenticarse pero NO deben acceder al panel admin.
+const STAFF_ROLES = ['admin', 'cajero', 'inventario'];
+
+// Requiere sesión de un miembro del equipo (cualquier rol excepto 'cliente').
+function staffRequired(req, res, next) {
+  authRequired(req, res, () => {
+    if (!STAFF_ROLES.includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Acceso restringido al personal del negocio' });
+    }
+    next();
+  });
+}
+
+// Requiere sesión + rol específico (se evalúa después de authRequired).
+function requireRole(...roles) {
+  return [authRequired, (req, res, next) => {
+    if (!roles.includes(req.user?.role)) {
+      return res.status(403).json({ error: 'No tienes permisos para esta acción' });
+    }
+    next();
+  }];
+}
+
+// Solo verifica req.user.role; usar DESPUÉS de authRequired/staffRequired
+// para no volver a resolver el token.
+function roleOnly(...roles) {
+  return (req, res, next) => {
+    if (!roles.includes(req.user?.role)) {
+      return res.status(403).json({ error: 'No tienes permisos para esta acción' });
+    }
+    next();
+  };
+}
+
+module.exports = { signToken, resolveUser, authRequired, staffRequired, requireRole, roleOnly, STAFF_ROLES };

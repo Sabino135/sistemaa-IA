@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api, fmtMoney } from '../lib/api';
+  import { user } from '../lib/store';
 
   let products = [];
   let categories = [];
@@ -13,6 +14,9 @@
   let error = '';
   let success = '';
   let processing = false;
+  // Referencia única por intento de cobro: evita ventas duplicadas si el
+  // usuario hace doble clic o se reintenta tras un error de red.
+  let clientRef = crypto.randomUUID();
 
   const TAX_RATE = 0.16;
 
@@ -50,7 +54,7 @@
     cart = cart.map(i => i.product.id === id ? { ...i, qty: Math.max(0, qty) } : i).filter(i => i.qty > 0);
   }
 
-  async function checkout() {
+  async function checkout(allowNegative = false) {
     if (cart.length === 0) return;
     processing = true; error = ''; success = '';
     try {
@@ -60,15 +64,30 @@
           customer_id: customerId || null,
           payment_method: paymentMethod,
           amount_received: paymentMethod === 'cash' && amountReceived !== '' ? Number(amountReceived) : null,
+          client_ref: clientRef,
+          allow_negative_stock: allowNegative,
           items: cart.map(i => ({ product_id: i.product.id, quantity: i.qty }))
         }
       });
       success = `Venta registrada: ${fmtMoney(sale.sale.total)}`;
       cart = [];
       amountReceived = '';
+      clientRef = crypto.randomUUID();
       // Recargar productos por si cambiaron precios/estado
       products = await api('/products');
-    } catch (e) { error = e.message; }
+    } catch (e) {
+      // Stock insuficiente: el admin puede autorizar la venta en negativo
+      if (e.status === 409 && e.data?.requires_override && $user?.role === 'admin') {
+        const detalle = (e.data.shortages || []).map(s =>
+          s.reason === 'sin_receta' ? `"${s.product}" sin receta` : `"${s.product}" (disp. ${s.available}, sol. ${s.needed})`
+        ).join('; ');
+        if (confirm(`Stock insuficiente: ${detalle}\n\n¿Autorizar la venta de todos modos?`)) {
+          processing = false;
+          return checkout(true);
+        }
+      }
+      error = e.message;
+    }
     processing = false;
   }
 </script>

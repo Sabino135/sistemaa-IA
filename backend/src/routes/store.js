@@ -1,6 +1,7 @@
 const { supabase } = require('../db/supabase');
 const express = require('express');
 const crypto = require('crypto');
+const { containsPoint, validCoordinates } = require('../lib/geo');
 
 const router = express.Router();
 
@@ -54,6 +55,48 @@ router.get('/settings', async (req, res) => {
   } catch (err) {
     console.error('[store/settings]', err);
     res.status(500).json({ error: 'Error al cargar la configuración de la tienda' });
+  }
+});
+
+// Zonas de entrega activas con su tarifa
+async function getDeliveryZones() {
+  const { data, error } = await supabase
+    .from('delivery_zones')
+    .select('id, name, geometry, delivery_fee')
+    .eq('active', true);
+  if (error) throw error;
+  return data || [];
+}
+
+// Encuentra la zona que contiene el punto; null si ninguna.
+function matchZone(zones, lat, lng) {
+  return zones.find(z => containsPoint(z.geometry || {}, 'polygon', [lat, lng])) || null;
+}
+
+// POST /api/store/delivery/check — valida cobertura y tarifa para un punto.
+// Body: { lat, lng }. Responde { covered, zone_name, delivery_fee }.
+router.post('/delivery/check', async (req, res) => {
+  try {
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    if (!validCoordinates(lat, lng)) {
+      return res.status(400).json({ error: 'lat y lng válidos son requeridos' });
+    }
+    const zones = await getDeliveryZones();
+    const zone = matchZone(zones, lat, lng);
+    if (zone) {
+      return res.json({ covered: true, zone_name: zone.name, delivery_fee: Number(zone.delivery_fee) });
+    }
+    // Sin zona que cubra el punto: cubierto solo si NO hay zonas configuradas
+    // (en ese caso aplica la tarifa plana de settings).
+    if (zones.length === 0) {
+      const s = await getSettings();
+      return res.json({ covered: true, zone_name: null, delivery_fee: Number(s.delivery_fee || 0) });
+    }
+    res.json({ covered: false, zone_name: null, delivery_fee: null });
+  } catch (err) {
+    console.error('[store/delivery/check]', err);
+    res.status(500).json({ error: 'Error al verificar la zona de entrega' });
   }
 });
 
@@ -133,7 +176,28 @@ router.post('/orders', async (req, res) => {
     subtotal = Math.round(subtotal * 100) / 100;
 
     const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
-    const delivery_fee = delivery_method === 'delivery' ? Number(settings.delivery_fee || 0) : 0;
+
+    // Tarifa de entrega: si hay zonas configuradas y el cliente envió
+    // coordenadas, se valida cobertura y se cobra la tarifa de la zona.
+    // Sin coordenadas se usa la tarifa plana (el repartidor confirma la zona).
+    let delivery_fee = 0;
+    let zoneName = null;
+    if (delivery_method === 'delivery') {
+      const lat = Number(b.delivery_lat);
+      const lng = Number(b.delivery_lng);
+      const hasCoords = validCoordinates(lat, lng);
+      const zones = await getDeliveryZones();
+      if (hasCoords && zones.length > 0) {
+        const zone = matchZone(zones, lat, lng);
+        if (!zone) {
+          return res.status(400).json({ error: 'Tu dirección está fuera de la zona de entrega' });
+        }
+        delivery_fee = Number(zone.delivery_fee || 0);
+        zoneName = zone.name;
+      } else {
+        delivery_fee = Number(settings.delivery_fee || 0);
+      }
+    }
     const total = Math.round((subtotal + tax + delivery_fee) * 100) / 100;
 
     // Cliente registrado (opcional): resolver user_id si viene un Bearer válido.
@@ -180,6 +244,7 @@ router.post('/orders', async (req, res) => {
         status: 'received',
         subtotal, delivery_fee, tax, total,
         notes: b.notes || null,
+        delivery_notes: [b.delivery_notes, zoneName ? `Zona: ${zoneName}` : null].filter(Boolean).join(' · ') || null,
         payment_reference: orderNumber // referencia legible hasta que MP asigne una
       })
       .select('*')

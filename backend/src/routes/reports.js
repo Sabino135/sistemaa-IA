@@ -1,9 +1,9 @@
 const { supabase } = require('../db/supabase');
 const express = require('express');
-const { authRequired } = require('../middleware/auth');
+const { staffRequired, roleOnly } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(authRequired);
+router.use(staffRequired);
 
 // GET /api/reports/dashboard — KPIs del negocio para el panel principal
 router.get('/dashboard', async (req, res) => {
@@ -138,7 +138,7 @@ router.get('/expenses', async (req, res) => {
 });
 
 // GET /api/reports/profitability — rentabilidad estimada
-router.get('/profitability', async (req, res) => {
+router.get('/profitability', roleOnly('admin'), async (req, res) => {
   try {
     const monthStart = new Date().toISOString().slice(0, 8) + '01';
     const { data: sales } = await supabase.from('sales').select('total').eq('status', 'completed').gte('created_at', monthStart);
@@ -158,6 +158,134 @@ router.get('/profitability', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Error al calcular rentabilidad' });
+  }
+});
+
+// GET /api/reports/products — productos más vendidos en un rango
+router.get('/products', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    let q = supabase
+      .from('sale_items')
+      .select('quantity, total, unit_price, products(id, name, price, cost), sales!inner(created_at, status)')
+      .eq('sales.status', 'completed');
+    if (from) q = q.gte('sales.created_at', from);
+    if (to) q = q.lte('sales.created_at', to + 'T23:59:59');
+    const { data, error } = await q.limit(5000);
+    if (error) throw error;
+
+    const map = {};
+    for (const it of data || []) {
+      const p = it.products || {};
+      const key = p.id || 'sin-producto';
+      map[key] = map[key] || {
+        product_id: p.id || null,
+        name: p.name || 'Desconocido',
+        quantity: 0, revenue: 0, cost: 0
+      };
+      const qty = Number(it.quantity) || 0;
+      map[key].quantity += qty;
+      map[key].revenue += Number(it.total) || 0;
+      map[key].cost += qty * Number(p.cost || 0);
+    }
+    const rows = Object.values(map)
+      .map(r => ({ ...r, profit: r.revenue - r.cost }))
+      .sort((a, b) => b.revenue - a.revenue);
+    res.json(rows);
+  } catch (err) {
+    console.error('[reports/products]', err);
+    res.status(500).json({ error: 'Error al generar reporte de productos' });
+  }
+});
+
+// GET /api/reports/customers — clientes con historial de compras
+router.get('/customers', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    let q = supabase.from('sales').select('id, total, created_at, customer_id, customers(name, phone, email)')
+      .eq('status', 'completed');
+    if (from) q = q.gte('created_at', from);
+    if (to) q = q.lte('created_at', to + 'T23:59:59');
+    const { data: sales, error } = await q.limit(5000);
+    if (error) throw error;
+
+    // Pedidos web del mismo rango (canal online)
+    let oq = supabase.from('orders').select('id, total, created_at, customer_id, customer_name, payment_status')
+      .neq('status', 'cancelled');
+    if (from) oq = oq.gte('created_at', from);
+    if (to) oq = oq.lte('created_at', to + 'T23:59:59');
+    const { data: orders } = await oq.limit(5000);
+
+    const map = {};
+    const bucket = key => map[key] = map[key] || { name: '', phone: '', purchases: 0, total: 0, orders: 0, orders_total: 0 };
+    for (const s of sales || []) {
+      const key = s.customer_id || `walkin-${s.id}`;
+      const b = bucket(key);
+      b.name = s.customers?.name || 'Mostrador';
+      b.phone = s.customers?.phone || '';
+      b.purchases += 1;
+      b.total += Number(s.total) || 0;
+    }
+    for (const o of orders || []) {
+      const key = o.customer_id || `web-${o.id}`;
+      const b = bucket(key);
+      b.name = o.customer_name || b.name || 'Cliente web';
+      b.orders += 1;
+      b.orders_total += Number(o.total) || 0;
+      b.total += Number(o.total) || 0;
+    }
+    const rows = Object.values(map).sort((a, b) => b.total - a.total);
+    res.json(rows);
+  } catch (err) {
+    console.error('[reports/customers]', err);
+    res.status(500).json({ error: 'Error al generar reporte de clientes' });
+  }
+});
+
+// GET /api/reports/inventory — valuación y alertas de inventario
+router.get('/inventory', async (req, res) => {
+  try {
+    const { data: ings, error } = await supabase
+      .from('ingredients')
+      .select('id, name, unit, stock, min_stock, cost_per_unit, active');
+    if (error) throw error;
+    const rows = (ings || []).map(i => ({
+      ...i,
+      stock_value: Math.round(Number(i.stock || 0) * Number(i.cost_per_unit || 0) * 100) / 100,
+      low: i.min_stock != null && Number(i.stock) <= Number(i.min_stock)
+    }));
+    res.json({
+      items: rows.filter(r => r.active),
+      total_value: rows.filter(r => r.active).reduce((a, r) => a + r.stock_value, 0),
+      low_stock: rows.filter(r => r.active && r.low)
+    });
+  } catch (err) {
+    console.error('[reports/inventory]', err);
+    res.status(500).json({ error: 'Error al generar reporte de inventario' });
+  }
+});
+
+// GET /api/reports/summary — consolidado ventas/gastos/utilidad por rango
+router.get('/summary', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    let sq = supabase.from('sales').select('total').eq('status', 'completed');
+    let eq = supabase.from('expenses').select('amount').eq('active', true);
+    if (from) { sq = sq.gte('created_at', from); eq = eq.gte('expense_date', from); }
+    if (to) { sq = sq.lte('created_at', to + 'T23:59:59'); eq = eq.lte('expense_date', to); }
+    const [{ data: sales }, { data: expenses }] = await Promise.all([sq, eq]);
+    const revenue = (sales || []).reduce((a, s) => a + Number(s.total), 0);
+    const expenseTotal = (expenses || []).reduce((a, e) => a + Number(e.amount), 0);
+    res.json({
+      revenue: Math.round(revenue * 100) / 100,
+      expenses: Math.round(expenseTotal * 100) / 100,
+      profit: Math.round((revenue - expenseTotal) * 100) / 100,
+      sales_count: (sales || []).length,
+      expenses_count: (expenses || []).length
+    });
+  } catch (err) {
+    console.error('[reports/summary]', err);
+    res.status(500).json({ error: 'Error al generar resumen' });
   }
 });
 

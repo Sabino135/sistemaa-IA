@@ -1,9 +1,10 @@
 const { supabase } = require('../db/supabase');
 const express = require('express');
-const { authRequired } = require('../middleware/auth');
+const { staffRequired, roleOnly } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(authRequired);
+router.use(staffRequired);
+const invWrite = roleOnly('admin', 'inventario');
 
 // GET /api/inventory/stock — existencias actuales por ingrediente
 router.get('/stock', async (req, res) => {
@@ -22,7 +23,7 @@ router.get('/stock', async (req, res) => {
 });
 
 // POST /api/inventory/adjust — ajuste manual de inventario
-router.post('/adjust', async (req, res) => {
+router.post('/adjust', invWrite, async (req, res) => {
   try {
     const { ingredient_id, quantity, reason = 'Ajuste manual', type = 'in' } = req.body || {};
     if (!ingredient_id || quantity === undefined) {
@@ -89,7 +90,7 @@ router.get('/recipes', async (req, res) => {
   }
 });
 
-router.post('/recipes', async (req, res) => {
+router.post('/recipes', invWrite, async (req, res) => {
   try {
     const { product_id, ingredient_id, quantity } = req.body || {};
     if (!product_id || !ingredient_id || !quantity) {
@@ -107,7 +108,7 @@ router.post('/recipes', async (req, res) => {
   }
 });
 
-router.delete('/recipes/:id', async (req, res) => {
+router.delete('/recipes/:id', invWrite, async (req, res) => {
   try {
     const { error } = await supabase.from('recipes').delete().eq('id', req.params.id);
     if (error) throw error;

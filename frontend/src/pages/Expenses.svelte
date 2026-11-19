@@ -11,6 +11,7 @@
       { value: 'transfer', label: 'Transferencia' }
     ]},
     { name: 'notes', label: 'Notas', type: 'textarea' },
+    { name: 'receipt_url', label: 'URL del comprobante (foto/archivo)' },
     { name: 'active', label: 'Activo', type: 'checkbox' }
   ];
   const cols = [
