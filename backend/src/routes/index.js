@@ -7,6 +7,9 @@ const inventoryRoutes = require('./inventory');
 const salesRoutes = require('./sales');
 const reportsRoutes = require('./reports');
 const geofencesRoutes = require('./geofences');
+const { router: storeRoutes } = require('./store');
+const orderRoutes = require('./orders');
+const storeWebhookRoutes = require('./store-webhooks');
 
 const router = express.Router();
 
@@ -15,6 +18,11 @@ router.use('/inventory', inventoryRoutes);
 router.use('/sales', salesRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/geofences', geofencesRoutes);
+// Tienda online: el webhook de pagos va ANTES de la tienda pública para que
+// no lo intercepte ninguna otra ruta, y no requiere autenticación.
+router.use('/store/webhooks', storeWebhookRoutes);
+router.use('/store', storeRoutes);
+router.use('/orders', orderRoutes);
 
 // CRUDs protegidos: auth antes de las rutas CRUD
 function authedCrud(config) {

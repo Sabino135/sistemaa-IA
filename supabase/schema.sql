@@ -193,3 +193,107 @@ alter table products alter column price drop not null;
 -- (del sistema bcrypt anterior) ya no se usa y rompía el INSERT
 -- de GET /api/auth/me con error 23502 (NOT NULL violation).
 alter table users drop column if exists password_hash;
+
+-- ============================================================
+-- TIENDA ONLINE (Daenerys)
+-- Los pedidos web viven en tablas propias (orders/order_items) y NO se
+-- mezclan con `sales` (que sigue siendo el POS presencial). Un pedido web
+-- puede convertirse luego en venta desde el panel, pero eso es opcional.
+-- ============================================================
+
+-- El rol del perfil operativo ahora admite "cliente" (compradores de la
+-- tienda que se registran). Los clientes web NO deben ver el panel admin.
+-- Se recrea el CHECK de forma idempotente.
+alter table users drop constraint if exists users_role_check;
+alter table users add constraint users_role_check
+  check (role in ('admin','cajero','inventario','cliente'));
+
+-- Configuración de la tienda: fila única (id fijo = 1).
+create table if not exists store_settings (
+  id integer primary key default 1 check (id = 1),
+  store_name text not null default 'Daenerys',
+  store_tagline text not null default 'Hamburguesas · Burritos · Carne asada',
+  logo_url text,
+  phone text,
+  whatsapp text,
+  address text,
+  -- Entrega
+  delivery_enabled boolean not null default true,
+  pickup_enabled boolean not null default true,
+  delivery_fee numeric(10,2) not null default 0 check (delivery_fee >= 0),
+  delivery_zones text,                        -- texto libre / lista simple
+  -- Datos bancarios para transferencia
+  bank_name text,
+  bank_account_name text,
+  bank_clabe text,
+  bank_account_number text,
+  transfer_instructions text,
+  -- Interruptores de métodos de pago
+  cash_enabled boolean not null default true,
+  transfer_enabled boolean not null default true,
+  mercadopago_enabled boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+-- Pedidos de la tienda online.
+create table if not exists orders (
+  id uuid primary key default gen_random_uuid(),
+  -- Número legible correlativo (para mostrar/identificar en el negocio)
+  order_number bigint generated always as identity,
+  -- Cliente: puede ser invitado (user_id/customer_id null) con datos capturados
+  user_id uuid references users(id) on delete set null,
+  customer_id uuid references customers(id) on delete set null,
+  customer_name text not null,
+  customer_phone text not null,
+  customer_email text,
+  -- Entrega
+  delivery_method text not null check (delivery_method in ('delivery','pickup')),
+  delivery_address text,
+  delivery_notes text,
+  -- Pago: estado SEPARADO del estado del pedido
+  payment_method text not null check (payment_method in ('mercadopago','transfer','cash')),
+  payment_status text not null default 'pending'
+    check (payment_status in ('pending','paid','rejected','cancelled','refunded')),
+  payment_reference text,                     -- preferencia/pago de Mercado Pago
+  payment_proof_url text,                     -- comprobante de transferencia
+  -- Estado del pedido
+  status text not null default 'received'
+    check (status in ('received','preparing','ready','on_the_way','delivered','cancelled')),
+  -- Importes
+  subtotal numeric(10,2) not null default 0,
+  delivery_fee numeric(10,2) not null default 0,
+  tax numeric(10,2) not null default 0,
+  total numeric(10,2) not null default 0,
+  notes text,
+  -- Token para que un invitado consulte su pedido sin cuenta
+  guest_token uuid not null default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists order_items (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders(id) on delete cascade,
+  product_id uuid references products(id) on delete set null,
+  name text not null,
+  unit_price numeric(10,2) not null default 0,
+  quantity integer not null check (quantity > 0),
+  total numeric(10,2) not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_orders_created_at on orders(created_at desc);
+create index if not exists idx_orders_status on orders(status);
+create index if not exists idx_orders_payment_status on orders(payment_status);
+create index if not exists idx_orders_user on orders(user_id);
+create index if not exists idx_order_items_order on order_items(order_id);
+
+-- RLS: mismo modelo que el resto del sistema. El backend usa service_role
+-- (omite RLS); anon/authenticated no acceden directamente a estas tablas.
+alter table store_settings enable row level security;
+alter table orders enable row level security;
+alter table order_items enable row level security;
+
+-- Fila única de configuración (el backend la crea/actualiza; aquí aseguramos
+-- que exista una por defecto sin sobrescribir valores ya configurados).
+insert into store_settings (id) values (1) on conflict (id) do nothing;

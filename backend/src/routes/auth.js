@@ -41,11 +41,17 @@ router.get('/me', async (req, res) => {
   // transitorio de Supabase), respondemos 200 con los datos del propio token
   // en lugar de un 500: el usuario está autenticado y puede trabajar; el
   // perfil se reintentará en la próxima llamada.
+  // Un comprador de la tienda se registra con user_metadata.is_customer=true
+  // (los empleados del panel no lo traen). El rol por defecto del perfil pasa
+  // a ser "cliente" para esos casos, evitando dar acceso al panel admin.
+  const isCustomer = user.metadata?.is_customer === true || user.metadata?.is_customer === 'true';
+  const defaultRole = isCustomer ? 'cliente' : 'cajero';
+
   const fallbackProfile = {
     id: user.id,
     name: user.name || user.email,
     email: user.email,
-    role: user.role || 'cajero',
+    role: user.role || defaultRole,
     active: true
   };
 
@@ -63,7 +69,7 @@ router.get('/me', async (req, res) => {
         id: user.id,
         name: user.name || user.email,
         email: user.email,
-        role: 'cajero',
+        role: defaultRole,
         active: true
       };
       const cols = 'id, name, email, role, active, created_at';

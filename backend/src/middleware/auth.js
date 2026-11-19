@@ -60,7 +60,11 @@ async function resolveUser(token) {
     id: u.id,
     email: u.email,
     name: prof?.name || u.user_metadata?.name || u.email,
-    role: prof?.role || u.app_metadata?.role || 'cajero'
+    role: prof?.role || u.app_metadata?.role || 'cajero',
+    // Metadatos de Supabase Auth: permiten distinguir a un comprador de la
+    // tienda (is_customer) de un empleado del panel cuando el perfil aún no
+    // existe en public.users.
+    metadata: u.user_metadata || {}
   };
 }
 
