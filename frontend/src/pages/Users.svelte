@@ -17,7 +17,10 @@
 
   async function load() {
     loading = true; error = '';
-    try { users = await api('/users'); }
+    try {
+      const all = await api('/users');
+      users = all.filter(u => ['admin', 'cajero', 'inventario'].includes(u.role));
+    }
     catch (e) { error = e.message; }
     loading = false;
   }

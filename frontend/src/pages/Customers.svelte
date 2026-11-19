@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, fmtMoney, fmtDate } from '../lib/api';
   import { user } from '../lib/store';
+  import WhatsAppButton from '../lib/WhatsAppButton.svelte';
 
   const canWrite = ['admin', 'cajero', 'inventario'].includes($user?.role);
 
@@ -139,6 +140,7 @@
         <button class="secondary" on:click={() => historyFor = null}>Cerrar</button>
       </div>
       <p class="muted">{historyFor.phone || ''} {historyFor.email ? '· ' + historyFor.email : ''}</p>
+      <WhatsAppButton small phone={historyFor.phone} message={`Hola ${historyFor.name || ''}, te escribimos de Daenerys.`} label="WhatsApp" />
 
       {#if historyLoading}<p class="muted">Cargando…</p>
       {:else}

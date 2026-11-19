@@ -56,14 +56,16 @@ async function resolveUser(token) {
 
   if (prof && prof.active === false) return null;
 
+  // Compradores de la tienda (is_customer en user_metadata) no deben heredar
+  // el rol operativo por defecto si aún no tienen perfil en public.users.
+  const isCustomer = u.user_metadata?.is_customer === true || u.user_metadata?.is_customer === 'true';
+  const fallbackRole = isCustomer ? 'cliente' : 'cajero';
+
   return {
     id: u.id,
     email: u.email,
     name: prof?.name || u.user_metadata?.name || u.email,
-    role: prof?.role || u.app_metadata?.role || 'cajero',
-    // Metadatos de Supabase Auth: permiten distinguir a un comprador de la
-    // tienda (is_customer) de un empleado del panel cuando el perfil aún no
-    // existe en public.users.
+    role: prof?.role || u.app_metadata?.role || fallbackRole,
     metadata: u.user_metadata || {}
   };
 }

@@ -295,6 +295,37 @@ router.post('/orders', async (req, res) => {
   }
 });
 
+// GET /api/store/orders/mine — pedidos del cliente autenticado (tienda).
+// Requiere Bearer de Supabase Auth con is_customer o perfil role='cliente'.
+router.get('/orders/mine', async (req, res) => {
+  try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'Inicia sesión para ver tus pedidos' });
+
+    const { resolveUser } = require('../middleware/auth');
+    const u = await resolveUser(token);
+    if (!u) return res.status(401).json({ error: 'Sesión inválida o expirada' });
+
+    const isCustomer = u.metadata?.is_customer === true || u.metadata?.is_customer === 'true' || u.role === 'cliente';
+    if (!isCustomer && u.role !== 'admin') {
+      return res.status(403).json({ error: 'Esta sección es para clientes de la tienda' });
+    }
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, order_number, status, payment_status, payment_method, delivery_method, total, created_at, order_items(name, quantity, unit_price, total)')
+      .eq('user_id', u.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    console.error('[store/orders/mine]', err);
+    res.status(500).json({ error: 'Error al consultar tus pedidos' });
+  }
+});
+
 // GET /api/store/orders/:id?token=... — consultar pedido propio (invitado o cliente)
 router.get('/orders/:id', async (req, res) => {
   try {

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, fmtMoney, fmtDate } from '../lib/api';
   import { user } from '../lib/store';
+  import WhatsAppButton from '../lib/WhatsAppButton.svelte';
 
   const ORDER_STATUS = {
     received: 'Recibido', preparing: 'Preparando', ready: 'Listo',
@@ -142,6 +143,7 @@
 
       <h4>Cliente</h4>
       <p><strong>{detail.customer_name}</strong> · {detail.customer_phone}{#if detail.customer_email}<br />{detail.customer_email}{/if}</p>
+      <WhatsAppButton small phone={detail.customer_phone} message={`Hola ${detail.customer_name || ''}, te escribimos por tu pedido #${detail.order_number ?? detail.id.slice(0, 8)}.`} label="WhatsApp cliente" />
       {#if detail.delivery_method === 'delivery'}
         <p class="muted">Entrega a domicilio{#if detail.delivery_address}: {detail.delivery_address}{/if}{#if detail.delivery_notes}<br />Notas: {detail.delivery_notes}{/if}</p>
       {:else}

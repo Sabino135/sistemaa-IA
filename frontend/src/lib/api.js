@@ -19,7 +19,9 @@ export async function api(path, { method = 'GET', body } = {}) {
     // Un 401 sin token no debe disparar signOut ni redirecciones en bucle.
     if (res.status === 401 && token) {
       try { await supabase.auth.signOut(); } catch { /* sesión ya inválida */ }
-      if (!window.location.hash.startsWith('#/login')) {
+      const h = window.location.hash || '';
+      const publicStore = h.startsWith('#/tienda') || h.startsWith('#/pedido') || h === '' || h === '#/';
+      if (!h.startsWith('#/login') && !publicStore) {
         window.location.hash = '#/login';
       }
     }

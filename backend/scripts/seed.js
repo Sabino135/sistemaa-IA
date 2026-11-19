@@ -51,6 +51,36 @@ async function main() {
     }
   }
 
+  // 1b. Cliente demo de la tienda online (rol 'cliente', no entra al panel)
+  const { data: createdClient, error: clientAuthErr } = await supabase.auth.admin.createUser({
+    email: 'cliente@negocio.com',
+    password: 'cliente123',
+    email_confirm: true,
+    user_metadata: { name: 'Cliente Demo', is_customer: true }
+  });
+  if (clientAuthErr && !clientAuthErr.message.includes('already been registered')) {
+    console.log(`  cliente demo omitido: ${clientAuthErr.message}`);
+  } else {
+    let clientId = createdClient?.user?.id;
+    if (!clientId) {
+      const { data: list } = await supabase.auth.admin.listUsers();
+      clientId = list?.users?.find(u => u.email === 'cliente@negocio.com')?.id;
+    }
+    if (clientId) {
+      try {
+        await upsert('users', [{
+          id: clientId,
+          name: 'Cliente Demo',
+          email: 'cliente@negocio.com',
+          role: 'cliente',
+          active: true
+        }]);
+      } catch (e) {
+        console.log(`  users cliente: omitido (${e.message}) — se creará en el primer inicio de sesión`);
+      }
+    }
+  }
+
   // 2. Categorías de producto
   const cats = [
     { name: 'Hamburguesas', description: 'Hamburguesas especiales Monster' },
@@ -180,7 +210,7 @@ async function main() {
   // Cliente demo
   await upsert('customers', [{ name: 'Cliente Mostrador', phone: '', email: '', active: true }], 'name');
 
-  console.log('\nListo. Login: admin@negocio.com / admin123');
+  console.log('\nListo. Panel: admin@negocio.com / admin123 · Tienda: cliente@negocio.com / cliente123');
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

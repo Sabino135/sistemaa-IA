@@ -45,7 +45,7 @@ BCRYPT_ROUNDS=12
 npm install
 node backend/scripts/seed.js
 ```
-Crea el usuario admin (`admin@negocio.com` / `admin123` — **cámbialo**) y datos de ejemplo: categorías, ingredientes, productos y recetas.
+Crea el usuario admin (`admin@negocio.com` / `admin123` — **cámbialo**), un cliente demo de tienda (`cliente@negocio.com` / `cliente123`) y datos de ejemplo: categorías, ingredientes, productos y recetas.
 
 ### 4. Desarrollo local
 ```bash
@@ -67,16 +67,18 @@ La autenticación la maneja **Supabase Auth** (Google OAuth + email/password):
    - `http://localhost:5173/` (desarrollo)
    - `https://tu-dominio.vercel.app/` (producción)
 3. El frontend inicia sesión con `signInWithOAuth` / `signInWithPassword` / `signUp`.
-4. El backend verifica el access token con `supabase.auth.getUser()` y hace upsert del perfil en `public.users` (rol `cajero` por defecto; cámbialo a `admin` en la tabla `users`).
+4. El backend verifica el access token con `supabase.auth.getUser()` y hace upsert del perfil en `public.users`. Los compradores de la tienda se registran con `is_customer=true` y quedan como `cliente`; el personal (admin/cajero/inventario) se crea desde el panel o el seed.
 
 ## Funcionalidades
 
+- **Tienda online pública:** `/` y `/tienda` muestran el catálogo con búsqueda, categorías, carrito, checkout (entrega/recoger), pago en efectivo/transferencia/Mercado Pago, rastreo de pedido y cuenta de cliente (`/tienda/cuenta`).
+- **WhatsApp:** botón flotante y botones de contacto en tienda, checkout, rastreo de pedidos, clientes y pedidos del panel (se configura en `store_settings.whatsapp` o `phone`).
 - **POS:** catálogo por categorías, ticket, pagos (efectivo/tarjeta/transferencia), cálculo, cambio.
 - **Inventario automático:** cada venta descuenta ingredientes según las recetas; cancelación reintegra stock; alertas de stock mínimo; movimientos auditables; ajustes manuales.
 - **Reportes:** ventas del día/mes, gastos, utilidad, margen, valor del inventario, productos más vendidos.
 - **Geocercas:** dibujo de círculos y polígonos, guardado en Supabase, seguimiento de ubicación y registro de entradas/salidas por usuario.
 - **Seguridad:** Supabase Auth (OAuth Google + email/password), JWT verificado en backend, Helmet, CORS, rate limiting y balanceador de cargas por concurrencia.
-- **Roles:** admin, cajero, inventario.
+- **Roles:** admin, cajero, inventario y cliente (compradores de la tienda; no entran al panel).
 
 ## Notas
 

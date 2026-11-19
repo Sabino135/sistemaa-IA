@@ -1,6 +1,9 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { api, fmtMoney, fmtDate } from '../../lib/api';
+  import { storeSettings } from '../../lib/storefront';
+  import { orderWhatsAppMessage } from '../../lib/whatsapp';
+  import WhatsAppButton from '../../lib/WhatsAppButton.svelte';
 
   export let id;
   export let qs = '';
@@ -21,6 +24,12 @@
   const token = new URLSearchParams(qs).get('token') || '';
   const STEPS = ['received', 'preparing', 'ready', 'on_the_way', 'delivered'];
   $: stepIdx = order ? STEPS.indexOf(order.status) : -1;
+  $: waMessage = order ? orderWhatsAppMessage({
+    items: order.order_items || [],
+    total: order.total,
+    orderNumber: order.order_number,
+    delivery: order.delivery_method === 'delivery' ? 'A domicilio' : 'Recoger en tienda'
+  }) : '';
 
   async function load() {
     try {
@@ -54,6 +63,7 @@
           {PAY_STATUS[order.payment_status] || order.payment_status}
         </span>
       </div>
+      <WhatsAppButton small phone={$storeSettings?.whatsapp || $storeSettings?.phone} message={waMessage} label="Contactar por WhatsApp" />
     </div>
 
     {#if order.status !== 'cancelled'}

@@ -1,5 +1,7 @@
 <script>
   import { navigate } from '../../lib/store';
+  import { storeSettings } from '../../lib/storefront';
+  import WhatsAppButton from '../../lib/WhatsAppButton.svelte';
 
   let id = '';
   let token = '';
@@ -26,4 +28,6 @@
   <label for="lk-token">Código de seguimiento</label>
   <input id="lk-token" bind:value={token} placeholder="Token de invitado" />
   <button style="width:100%;margin-top:10px" on:click={go}>Buscar pedido</button>
+  <p class="muted" style="margin-top:14px">¿No tienes el ID? Escríbenos y te ayudamos.</p>
+  <WhatsAppButton phone={$storeSettings?.whatsapp || $storeSettings?.phone} label="Pedir ayuda por WhatsApp" />
 </div>

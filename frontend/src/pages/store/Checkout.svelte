@@ -4,6 +4,9 @@
   import { cart, clearCart } from '../../lib/cart';
   import { navigate } from '../../lib/store';
   import { supabase } from '../../lib/supabase';
+  import { loadStoreSettings } from '../../lib/storefront';
+  import { orderWhatsAppMessage } from '../../lib/whatsapp';
+  import WhatsAppButton from '../../lib/WhatsAppButton.svelte';
 
   let settings = null;
   let loading = true;
@@ -30,7 +33,7 @@
 
   onMount(async () => {
     try {
-      settings = await api('/store/settings');
+      settings = await loadStoreSettings();
       if (!settings.pickup_enabled && settings.delivery_enabled) form.delivery_method = 'delivery';
       if (!settings.delivery_enabled && settings.pickup_enabled) form.delivery_method = 'pickup';
       const firstPay = payMethods[0];
@@ -98,7 +101,13 @@
         order_number: res.order.order_number,
         total: res.order.total,
         payment_method: res.order.payment_method,
-        guest_token: res.guest_token
+        guest_token: res.guest_token,
+        wa_message: orderWhatsAppMessage({
+          items: $cart,
+          total: res.order.total,
+          orderNumber: res.order.order_number,
+          delivery: form.delivery_method === 'delivery' ? 'A domicilio' : 'Recoger en tienda'
+        })
       };
       clearCart();
     } catch (e) { error = e.message; }
@@ -125,9 +134,10 @@
     {:else if result.payment_method === 'cash'}
       <p class="muted">Paga en efectivo al recibir tu pedido o al recogerlo.</p>
     {/if}
-    <div class="flex">
+    <div class="flex" style="flex-wrap:wrap">
       <button on:click={() => navigate(`/pedido/${result.id}?token=${result.guest_token}`)}>Rastrear mi pedido</button>
       <button class="secondary" on:click={() => navigate('/tienda')}>Volver al menú</button>
+      <WhatsAppButton phone={settings?.whatsapp || settings?.phone} message={result.wa_message} label="Avisar por WhatsApp" />
     </div>
   </div>
 {:else}

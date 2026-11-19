@@ -42,6 +42,7 @@
   // roles: null = todos los usuarios; array = solo esos roles
   const NAV = [
     { path: '/dashboard', label: 'Dashboard', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', roles: null },
+    { path: '/tienda', label: 'Tienda online', icon: 'M3 9l1.5-5h15L21 9M3 9v10a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9M3 9h18M9 21V12h6v9', roles: null },
     { path: '/pos', label: 'Punto de venta', icon: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM9 7h6M9 11h6M9 15h4', roles: null },
     { path: '/sales', label: 'Ventas', icon: 'M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-1 1zM8 7h8M8 11h8', roles: null },
     { path: '/orders', label: 'Pedidos web', icon: 'M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0', roles: ['admin', 'cajero'] },
@@ -59,8 +60,10 @@
   const ROLE_LABELS = { admin: 'Administrador', cajero: 'Cajero', inventario: 'Inventario' };
 
   $: current = $route.split('?')[0] || '/';
-  // La tienda online y el rastreo de pedidos son públicos (no requieren login)
-  $: isPublicStore = current.startsWith('/tienda') || current.startsWith('/pedido');
+  $: isCustomer = $user?.role === 'cliente';
+  // La tienda online y el rastreo de pedidos son públicos (no requieren login).
+  // '/' muestra la tienda a visitantes; el personal entra al panel por /login.
+  $: isPublicStore = current.startsWith('/tienda') || current.startsWith('/pedido') || isCustomer || (current === '/' && !$user);
   $: Page = pages[current] || Dashboard;
   $: isLogin = current === '/login';
   $: loggedIn = !!$user;
@@ -76,10 +79,10 @@
       if (event === 'SIGNED_OUT' && !isLogin) navigate('/login');
     });
     await initAuth();
-    if ($user && (isLogin || current === '/')) navigate('/dashboard');
+    if ($user?.role === 'cliente' && !current.startsWith('/tienda') && !current.startsWith('/pedido')) navigate('/tienda');
+    if ($user && $user.role !== 'cliente' && (isLogin || current === '/')) navigate('/dashboard');
     if (!$user && !isLogin && current !== '/' && !isPublicStore) navigate('/login');
-    if (current === '/' && !$user) navigate('/login');
-    if ($user && !isPublicStore) loadAlerts();
+    if ($user && $user.role !== 'cliente' && !isPublicStore) loadAlerts();
     return unsub;
   });
 

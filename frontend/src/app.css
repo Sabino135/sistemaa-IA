@@ -263,3 +263,80 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   .store-cart { position: static; }
   .store-header { flex-wrap: wrap; gap: 10px; }
 }
+
+/* ===== Tienda online: hero, búsqueda y cuenta ===== */
+.store-hero {
+  background:
+    radial-gradient(900px 320px at 10% -20%, rgba(249, 115, 22, .18), transparent 60%),
+    linear-gradient(135deg, var(--panel), var(--panel2));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 26px;
+  margin-bottom: 18px;
+}
+.store-hero h1 { margin: 0 0 6px; font-size: clamp(26px, 4vw, 40px); letter-spacing: -.01em; }
+.store-hero p { margin: 0; color: var(--muted); font-size: 15px; max-width: 680px; }
+.store-logo { height: 44px; width: auto; border-radius: 8px; background: #fff; padding: 4px; }
+.store-controls { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.store-search { flex: 1; min-width: 220px; margin-bottom: 0; }
+.store-sort { width: auto; margin-bottom: 0; }
+.store-cats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.store-cats button { padding: 6px 14px; font-size: 13px; }
+.store-img-fallback {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 44px; font-weight: 800; color: var(--accent2);
+  background: linear-gradient(135deg, var(--panel2), var(--panel));
+}
+.store-cat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent2); }
+.store-desc {
+  font-size: 13px; min-height: 38px; margin: 4px 0 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.store-cart-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.store-footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; text-align: left; }
+.store-account { max-width: 780px; margin: 30px auto; }
+.store-account-orders { display: flex; flex-direction: column; gap: 8px; }
+.store-account-order {
+  display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center;
+  width: 100%; text-align: left; background: var(--panel2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 10px; padding: 12px 14px; cursor: pointer;
+}
+.store-account-order:hover { background: var(--border); }
+@media (max-width: 700px) {
+  .store-account-order { grid-template-columns: 1fr auto; }
+  .store-account-order .badge:last-of-type { display: none; }
+}
+
+/* ===== WhatsApp ===== */
+.whatsapp-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #25d366; color: #fff; border-radius: 10px;
+  padding: 9px 16px; font-weight: 600; text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, .15);
+}
+.whatsapp-btn:hover { background: #1ebe5d; color: #fff; }
+.whatsapp-btn.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+.whatsapp-btn.secondary:hover { background: var(--border); color: var(--text); }
+.whatsapp-btn.small { padding: 6px 12px; font-size: 13px; }
+.whatsapp-float {
+  position: fixed; right: 18px; bottom: 18px; z-index: 80;
+  width: 56px; height: 56px; border-radius: 50%; padding: 0;
+  justify-content: center; box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+.whatsapp-float svg { width: 28px; height: 28px; }
+
+/* ===== Utilidades de formularios públicos ===== */
+.info-msg {
+  background: rgba(34, 197, 94, .1); border: 1px solid rgba(34, 197, 94, .35);
+  color: #86efac; font-size: 13px; padding: 10px 14px; border-radius: 10px; margin-bottom: 16px;
+}
+.link-btn { background: none; border: none; color: var(--accent2); font-size: 13px; cursor: pointer; padding: 0; }
+.link-btn:hover { text-decoration: underline; }
+.input-wrap { position: relative; margin-bottom: 16px; }
+.input-wrap input { padding-right: 42px; }
+.eye-btn {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: transparent; border: none; color: var(--muted); padding: 6px;
+  border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center;
+}
+.eye-btn:hover { color: var(--text); background: rgba(255, 255, 255, .05); }
