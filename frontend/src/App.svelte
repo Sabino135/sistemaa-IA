@@ -149,7 +149,7 @@
         </div>
       </header>
       <main class="main">
-        <Page />
+        <svelte:component this={Page} />
       </main>
       <Footer />
     </div>

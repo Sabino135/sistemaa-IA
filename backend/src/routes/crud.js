@@ -29,9 +29,15 @@ function crudRouter({ tabla, select = '*', updatable, searchFields = ['name'] })
   router.get('/:id', async (req, res) => {
     try {
       const { data, error } = await supabase.from(tabla).select(select).eq('id', req.params.id).single();
-      if (error) return res.status(404).json({ error: 'Registro no encontrado' });
+      if (error) {
+        if (error.code === 'PGRST116' || /0 rows/i.test(error.message || '')) {
+          return res.status(404).json({ error: 'Registro no encontrado' });
+        }
+        throw error;
+      }
       res.json(data);
     } catch (err) {
+      console.error(`[crud:${tabla}] GET /:id`, err);
       res.status(500).json({ error: 'Error al consultar registro' });
     }
   });
@@ -54,7 +60,12 @@ function crudRouter({ tabla, select = '*', updatable, searchFields = ['name'] })
       const body = {};
       for (const k of updatable) if (req.body[k] !== undefined) body[k] = req.body[k];
       const { data, error } = await supabase.from(tabla).update(body).eq('id', req.params.id).select(select).single();
-      if (error) return res.status(404).json({ error: 'Registro no encontrado' });
+      if (error) {
+        if (error.code === 'PGRST116' || /0 rows/i.test(error.message || '')) {
+          return res.status(404).json({ error: 'Registro no encontrado' });
+        }
+        throw error;
+      }
       res.json(data);
     } catch (err) {
       console.error(`[crud:${tabla}] PUT`, err);
@@ -64,9 +75,14 @@ function crudRouter({ tabla, select = '*', updatable, searchFields = ['name'] })
 
   router.delete('/:id', async (req, res) => {
     try {
-      const { error } = await supabase.from(tabla).update({ active: false }).eq('id', req.params.id);
-      if (error) throw error;
-      res.json({ ok: true });
+      const { data, error } = await supabase.from(tabla).update({ active: false }).eq('id', req.params.id).select('id').single();
+      if (error) {
+        if (error.code === 'PGRST116' || /0 rows/i.test(error.message || '')) {
+          return res.status(404).json({ error: 'Registro no encontrado' });
+        }
+        throw error;
+      }
+      res.json({ ok: true, id: data.id });
     } catch (err) {
       console.error(`[crud:${tabla}] DELETE`, err);
       res.status(500).json({ error: 'Error al eliminar registro' });

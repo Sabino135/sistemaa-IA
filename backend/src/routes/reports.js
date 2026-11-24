@@ -14,7 +14,7 @@ router.get('/dashboard', async (req, res) => {
 
     const [todaySales, monthSales, expensesToday, expensesMonth, lowStock, topProductsRaw, recentOrders] = await Promise.all([
       supabase.from('sales').select('id, total').eq('status', 'completed').gte('created_at', today),
-      supabase.from('sales').select('total, created_at').eq('status', 'completed').gte('created_at', daysAgo14),
+      supabase.from('sales').select('total, created_at').eq('status', 'completed').gte('created_at', monthStart),
       supabase.from('expenses').select('amount').eq('active', true).eq('expense_date', today),
       supabase.from('expenses').select('amount').eq('active', true).gte('expense_date', monthStart),
       supabase.from('ingredients').select('id, name, unit, stock, min_stock').eq('active', true),

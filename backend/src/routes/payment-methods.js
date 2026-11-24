@@ -69,7 +69,12 @@ router.put('/:id', roleOnly('admin'), async (req, res) => {
       .eq('id', req.params.id)
       .select(SELECT)
       .single();
-    if (error) return res.status(404).json({ error: 'Método de pago no encontrado' });
+    if (error) {
+      if (error.code === 'PGRST116' || /0 rows/i.test(error.message || '')) {
+        return res.status(404).json({ error: 'Método de pago no encontrado' });
+      }
+      throw error;
+    }
     res.json(data);
   } catch (err) {
     console.error('[payment-methods PUT]', err);

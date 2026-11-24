@@ -66,7 +66,12 @@ router.put('/:id', async (req, res) => {
     if (body.name !== undefined) body.name = String(body.name).trim();
     const { data, error } = await supabase
       .from('delivery_zones').update(body).eq('id', req.params.id).select(SELECT).single();
-    if (error) return res.status(404).json({ error: 'Zona no encontrada' });
+    if (error) {
+      if (error.code === 'PGRST116' || /0 rows/i.test(error.message || '')) {
+        return res.status(404).json({ error: 'Zona no encontrada' });
+      }
+      throw error;
+    }
     res.json(data);
   } catch (err) {
     console.error('[delivery-zones PUT]', err);

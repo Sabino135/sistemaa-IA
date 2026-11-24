@@ -25,10 +25,10 @@
 
   const ingFields = [
     { name: 'name', label: 'Nombre', required: true },
-    { name: 'unit', label: 'Unidad (pz, kg, lt…)' },
-    { name: 'stock', label: 'Stock inicial', type: 'number' },
+    { name: 'unit', label: 'Unidad (pz, kg, lt…)', default: 'pz' },
+    { name: 'stock', label: 'Stock inicial', type: 'number', default: 0 },
     { name: 'min_stock', label: 'Stock mínimo (alerta)', type: 'number' },
-    { name: 'cost_per_unit', label: 'Costo por unidad', type: 'number' },
+    { name: 'cost_per_unit', label: 'Costo por unidad', type: 'number', default: 0 },
     { name: 'active', label: 'Activo', type: 'checkbox' }
   ];
   const ingCols = [

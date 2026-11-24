@@ -26,10 +26,11 @@ router.get('/stock', async (req, res) => {
 router.post('/adjust', invWrite, async (req, res) => {
   try {
     const { ingredient_id, quantity, reason = 'Ajuste manual', type = 'in' } = req.body || {};
-    if (!ingredient_id || quantity === undefined) {
-      return res.status(400).json({ error: 'ingredient_id y quantity son requeridos' });
+    const qty = Number(quantity);
+    if (!ingredient_id || !Number.isFinite(qty) || qty <= 0 || !['in', 'out'].includes(type)) {
+      return res.status(400).json({ error: 'ingredient_id, quantity > 0 y type in/out son requeridos' });
     }
-    const delta = type === 'out' ? -Math.abs(quantity) : Math.abs(quantity);
+    const delta = type === 'out' ? -qty : qty;
 
     const { data: ing } = await supabase
       .from('ingredients')

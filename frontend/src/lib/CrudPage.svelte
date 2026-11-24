@@ -60,7 +60,7 @@
   function startNew() {
     editing = {};
     form = {};
-    for (const f of fields) form[f.name] = f.type === 'checkbox' ? true : (f.default ?? '');
+    for (const f of fields) form[f.name] = f.type === 'checkbox' ? (f.default ?? true) : (f.default ?? '');
     showForm = true;
   }
 
@@ -82,7 +82,8 @@
       const body = {};
       for (const f of fields) {
         let v = form[f.name];
-        if (f.type === 'number') v = v === '' ? null : Number(v);
+        if (f.type === 'number') v = v === '' ? (f.default ?? null) : Number(v);
+        if (f.type === 'select' && v === '') v = null;
         if (f.type === 'checkbox') v = !!v;
         body[f.name] = v;
       }

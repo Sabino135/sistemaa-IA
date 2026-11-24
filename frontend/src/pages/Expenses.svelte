@@ -3,9 +3,9 @@
   const fields = [
     { name: 'description', label: 'Descripción', required: true, type: 'textarea' },
     { name: 'amount', label: 'Monto', type: 'number', required: true },
-    { name: 'expense_date', label: 'Fecha', type: 'date' },
+    { name: 'expense_date', label: 'Fecha', type: 'date', default: new Date().toISOString().slice(0, 10) },
     { name: 'category_id', label: 'Categoría', type: 'select', optionsFrom: { endpoint: '/expense-categories?active=true', labelKey: 'name', valueKey: 'id' } },
-    { name: 'payment_method', label: 'Método de pago', type: 'select', options: [
+    { name: 'payment_method', label: 'Método de pago', type: 'select', default: 'cash', options: [
       { value: 'cash', label: 'Efectivo' },
       { value: 'card', label: 'Tarjeta' },
       { value: 'transfer', label: 'Transferencia' }

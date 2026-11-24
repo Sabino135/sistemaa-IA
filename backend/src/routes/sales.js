@@ -163,7 +163,11 @@ router.post('/', async (req, res) => {
     if (sErr) {
       // Carrera de idempotencia: otro request insertó el mismo client_ref
       if (sErr.code === '23505' && client_ref) {
-        const { data: dup } = await supabase.from('sales').select('id').eq('client_ref', client_ref).single();
+        const { data: dup } = await supabase
+          .from('sales')
+          .select('*, sale_items(*, products(name)), customers(name), users(name)')
+          .eq('client_ref', client_ref)
+          .single();
         if (dup) return res.status(200).json({ sale: dup, duplicate: true });
       }
       throw sErr;
