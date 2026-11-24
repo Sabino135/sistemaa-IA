@@ -56,10 +56,9 @@ async function resolveUser(token) {
 
   if (prof && prof.active === false) return null;
 
-  // Compradores de la tienda (is_customer en user_metadata) no deben heredar
-  // el rol operativo por defecto si aún no tienen perfil en public.users.
-  const isCustomer = u.user_metadata?.is_customer === true || u.user_metadata?.is_customer === 'true';
-  const fallbackRole = isCustomer ? 'cliente' : 'cajero';
+  // Los registros self-service siempre caen a 'cliente' si aún no tienen
+  // perfil en public.users; el rol de staff solo lo asigna un admin.
+  const fallbackRole = 'cliente';
 
   return {
     id: u.id,

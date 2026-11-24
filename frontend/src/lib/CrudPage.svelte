@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api, fmtMoney, fmtDate } from '../lib/api';
+  import { supabase } from './supabase';
 
   export let endpoint;          // ej: '/products'
   export let title;
@@ -16,8 +17,20 @@
   let search = '';
   let form = {};
   let saving = false;
+  let uploading = false;
   let optionCache = {};
   let fieldsR = fields;
+
+  // Sube la imagen seleccionada al bucket público de Supabase Storage y
+  // devuelve la URL pública. El bucket se elige según el campo.
+  async function uploadImage(file, bucket = 'product-images') {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = `${bucket === 'product-images' ? 'products' : 'misc'}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) throw upErr;
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  }
 
   async function loadOptions(f) {
     if (!f.optionsFrom) return f.options || [];
@@ -73,8 +86,20 @@
         if (f.type === 'checkbox') v = !!v;
         body[f.name] = v;
       }
+      // Campos tipo 'image': si hay archivo nuevo, subirlo y usar su URL.
+      for (const f of fieldsR) {
+        if (f.type === 'image' && form[`_file_${f.name}`]) {
+          uploading = true;
+          try {
+            body[f.name] = await uploadImage(form[`_file_${f.name}`], f.bucket || 'product-images');
+          } finally { uploading = false; }
+        } else if (f.type === 'image' && !editing?.id && !body[f.name]) {
+          body[f.name] = null;
+        }
+      }
       if (editing?.id) await api(`${endpoint}/${editing.id}`, { method: 'PUT', body });
       else await api(endpoint, { method: 'POST', body });
+      for (const f of fieldsR) if (f.type === 'image') form[`_file_${f.name}`] = null;
       showForm = false;
       await load();
       if (afterSave) afterSave();
@@ -123,6 +148,11 @@
             </select>
           {:else if f.type === 'textarea'}
             <textarea id="f-{f.name}" bind:value={form[f.name]} rows="2"></textarea>
+          {:else if f.type === 'image'}
+            {#if form[f.name]}<img src={form[f.name]} alt="" style="max-height:70px;border-radius:8px;margin-bottom:6px;display:block" />{/if}
+            <input id="f-{f.name}" type="file" accept="image/*"
+              on:change={(e) => form[`_file_${f.name}`] = e.target.files?.[0] || null} />
+            <small class="muted">{form[`_file_${f.name}`] ? form[`_file_${f.name}`].name : 'Vacío = conservar imagen actual'}</small>
           {:else if f.type === 'checkbox'}
             <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
               <input type="checkbox" bind:checked={form[f.name]} style="width:auto;margin:0" /> {f.label}
@@ -135,7 +165,7 @@
       {/each}
     </div>
     <div class="flex">
-      <button on:click={save} disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</button>
+      <button on:click={save} disabled={saving || uploading}>{saving || uploading ? 'Guardando…' : 'Guardar'}</button>
       <button class="secondary" on:click={() => showForm = false}>Cancelar</button>
     </div>
   </div>

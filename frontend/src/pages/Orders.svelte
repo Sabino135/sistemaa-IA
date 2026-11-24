@@ -5,11 +5,11 @@
   import WhatsAppButton from '../lib/WhatsAppButton.svelte';
 
   const ORDER_STATUS = {
-    received: 'Recibido', preparing: 'Preparando', ready: 'Listo',
+    received: 'Pendiente', preparing: 'En preparación', ready: 'Listo para entregar',
     on_the_way: 'En camino', delivered: 'Entregado', cancelled: 'Cancelado'
   };
   const PAY_STATUS = {
-    pending: 'Pago pendiente', paid: 'Pagado', rejected: 'Rechazado',
+    pending: 'Pago pendiente', review: 'Pago en revisión', paid: 'Pago confirmado', rejected: 'Pago rechazado',
     cancelled: 'Pago cancelado', refunded: 'Reembolsado'
   };
   const PAY_METHOD = { mercadopago: 'Mercado Pago', transfer: 'Transferencia', cash: 'Efectivo' };

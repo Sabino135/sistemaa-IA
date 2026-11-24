@@ -293,6 +293,16 @@ button:disabled { opacity: .5; cursor: not-allowed; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .store-cart-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.store-announce {
+  background: linear-gradient(90deg, rgba(249,115,22,.18), rgba(249,115,22,.08));
+  border-bottom: 1px solid rgba(249,115,22,.35);
+  color: var(--text);
+  text-align: center;
+  font-size: 13px;
+  padding: 8px 16px;
+}
+.store-social { display: flex; gap: 12px; flex-wrap: wrap; }
+.store-social a { color: var(--accent2); }
 .store-footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; text-align: left; }
 .store-account { max-width: 780px; margin: 30px auto; }
 .store-account-orders { display: flex; flex-direction: column; gap: 8px; }

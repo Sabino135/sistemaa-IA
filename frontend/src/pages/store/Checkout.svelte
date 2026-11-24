@@ -124,7 +124,19 @@
     {#if result.payment_method === 'transfer'}
       <div class="card" style="background:var(--panel2)">
         <h4>Datos para transferir</h4>
-        {#if settings?.bank}
+        {#if (settings?.payment_accounts || []).length > 0}
+          {#each settings.payment_accounts as acc}
+            <div class="card" style="background:var(--panel);margin-bottom:8px">
+              <strong>{acc.name}</strong>
+              {#if acc.bank_name || acc.holder_name}<p class="muted" style="margin:4px 0">{[acc.bank_name, acc.holder_name].filter(Boolean).join(' · ')}</p>{/if}
+              {#if acc.clabe}<p>CLABE: <strong>{acc.clabe}</strong></p>{/if}
+              {#if acc.account_number}<p>Cuenta: <strong>{acc.account_number}</strong></p>{/if}
+              {#if acc.card_number}<p>Tarjeta: <strong>{acc.card_number}</strong></p>{/if}
+              {#if acc.instructions}<p class="muted">{acc.instructions}</p>{/if}
+              {#if acc.image_url}<p><a href={acc.image_url} target="_blank" rel="noopener">Ver referencia</a></p>{/if}
+            </div>
+          {/each}
+        {:else if settings?.bank}
           <p>{settings.bank.bank_name} · {settings.bank.account_name}<br />
           CLABE: {settings.bank.clabe || settings.bank.account_number || '—'}</p>
           {#if settings.bank.instructions}<p class="muted">{settings.bank.instructions}</p>{/if}
@@ -211,6 +223,16 @@
             </option>
           {/each}
         </select>
+        {#if form.payment_method === 'transfer' && (settings?.payment_accounts || []).length > 0}
+          <div class="card" style="background:var(--panel2);margin-top:8px">
+            <strong style="font-size:13px">Cuentas para transferir</strong>
+            {#each settings.payment_accounts as acc}
+              <p class="muted" style="font-size:12px;margin:6px 0 0">
+                {acc.name}{acc.bank_name ? ' · ' + acc.bank_name : ''}{acc.clabe ? ' — CLABE ' + acc.clabe : acc.account_number ? ' — Cuenta ' + acc.account_number : ''}
+              </p>
+            {/each}
+          </div>
+        {/if}
 
         <button style="width:100%;margin-top:14px" on:click={submit} disabled={submitting}>
           {submitting ? 'Enviando pedido…' : `Confirmar pedido · ${fmtMoney(total)}`}

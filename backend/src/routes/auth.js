@@ -44,8 +44,12 @@ router.get('/me', async (req, res) => {
   // Un comprador de la tienda se registra con user_metadata.is_customer=true
   // (los empleados del panel no lo traen). El rol por defecto del perfil pasa
   // a ser "cliente" para esos casos, evitando dar acceso al panel admin.
-  const isCustomer = user.metadata?.is_customer === true || user.metadata?.is_customer === 'true';
-  const defaultRole = isCustomer ? 'cliente' : 'cajero';
+  // Todo registro self-service (email/password en /login o /tienda/cuenta,
+  // Google OAuth) recibe rol 'cliente' por defecto. El rol de staff
+  // (admin/cajero/inventario) solo lo asigna un administrador desde el
+  // panel o el seed — user_metadata es controlado por el cliente y NO
+  // debe usarse para elevar privilegios.
+  const defaultRole = 'cliente';
 
   const fallbackProfile = {
     id: user.id,

@@ -45,7 +45,22 @@ BCRYPT_ROUNDS=12
 npm install
 node backend/scripts/seed.js
 ```
-Crea el usuario admin (`admin@negocio.com` / `admin123` — **cámbialo**), un cliente demo de tienda (`cliente@negocio.com` / `cliente123`) y datos de ejemplo: categorías, ingredientes, productos y recetas.
+Crea el usuario admin (`admin@daenerys.com` / `admin123` — **cámbialo**), un cliente demo de tienda (`cliente@daenerys.com` / `cliente123`) y datos de ejemplo: categorías, ingredientes, productos y recetas.
+
+### Migración de identidad (bases ya existentes)
+Si la base ya tiene cuentas `@negocio.com`, renómbralas conservando el id
+de usuario (no se rompen pedidos ni relaciones):
+
+```bash
+node backend/scripts/migrate-identity.js
+```
+
+> **Nota sobre el dominio `daenerys.com`:** Supabase Auth puede crear y
+> autenticar usuarios con cualquier correo, pero para que funcionen los
+> correos de confirmación/recuperación de contraseña el dominio debe
+> estar verificado en *Authentication → Emails* (o configurarse un SMTP
+> propio). Mientras tanto el inicio de sesión con contraseña funciona
+> con normalidad.
 
 ### 4. Desarrollo local
 ```bash
@@ -78,7 +93,9 @@ La autenticación la maneja **Supabase Auth** (Google OAuth + email/password):
 - **Reportes:** ventas del día/mes, gastos, utilidad, margen, valor del inventario, productos más vendidos.
 - **Geocercas:** dibujo de círculos y polígonos, guardado en Supabase, seguimiento de ubicación y registro de entradas/salidas por usuario.
 - **Seguridad:** Supabase Auth (OAuth Google + email/password), JWT verificado en backend, Helmet, CORS, rate limiting y balanceador de cargas por concurrencia.
-- **Roles:** admin, cajero, inventario y cliente (compradores de la tienda; no entran al panel).
+- **Roles:** admin, cajero, inventario y cliente (compradores de la tienda; no entran al panel). Todo registro self-service recibe rol `cliente`; el rol de staff solo lo asigna un admin.
+- **Configuración admin:** información del negocio (descripción, horarios, email, redes sociales, banner, avisos), productos destacados, cuentas de cobro múltiples (`payment_methods`) y zonas de entrega.
+- **Pedidos web:** folio `D-XXXXXX`, estados de pedido y de pago (incluye "Pago en revisión"), comprobante de transferencia adjuntable por el cliente (Supabase Storage `payment-proofs`), detalle completo en el panel y conversión automática a venta POS al entregar.
 
 ## Notas
 

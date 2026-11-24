@@ -50,6 +50,10 @@
     </nav>
   </header>
 
+  {#if $storeSettings?.announcement}
+    <div class="store-announce">{$storeSettings.announcement}</div>
+  {/if}
+
   <main class="store-main">
     {#if isCheckout}
       <Checkout {qs} />
@@ -73,6 +77,15 @@
       <div class="muted">
         {#if $storeSettings?.address}<p>{$storeSettings.address}</p>{/if}
         {#if $storeSettings?.phone}<p>Tel: {$storeSettings.phone}</p>{/if}
+        {#if $storeSettings?.business_hours}<p>Horario: {$storeSettings.business_hours}</p>{/if}
+        {#if $storeSettings?.email}<p>{$storeSettings.email}</p>{/if}
+        {#if $storeSettings?.social?.facebook || $storeSettings?.social?.instagram || $storeSettings?.social?.tiktok}
+          <p class="store-social">
+            {#if $storeSettings.social.facebook}<a href={$storeSettings.social.facebook} target="_blank" rel="noopener">Facebook</a>{/if}
+            {#if $storeSettings.social.instagram}<a href={$storeSettings.social.instagram} target="_blank" rel="noopener">Instagram</a>{/if}
+            {#if $storeSettings.social.tiktok}<a href={$storeSettings.social.tiktok} target="_blank" rel="noopener">TikTok</a>{/if}
+          </p>
+        {/if}
       </div>
       <div>
         <WhatsAppButton phone={$storeSettings?.whatsapp || $storeSettings?.phone} label="Escríbenos por WhatsApp" />

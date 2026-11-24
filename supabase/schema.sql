@@ -238,8 +238,8 @@ create table if not exists store_settings (
 -- Pedidos de la tienda online.
 create table if not exists orders (
   id uuid primary key default gen_random_uuid(),
-  -- Número legible correlativo (para mostrar/identificar en el negocio)
-  order_number bigint generated always as identity,
+  -- Número legible 'D-XXXXXX' (lo genera el trigger orders_set_order_number)
+  order_number text,
   -- Cliente: puede ser invitado (user_id/customer_id null) con datos capturados
   user_id uuid references users(id) on delete set null,
   customer_id uuid references customers(id) on delete set null,
@@ -420,3 +420,96 @@ $$;
 -- (vía receta) y bloquea la venta sin stock salvo override de admin.
 -- Productos sin receta con track_inventory=true no se pueden vender.
 alter table products add column if not exists track_inventory boolean not null default true;
+
+-- ============================================================
+-- DAENERYS — Configuración administrativa, métodos de pago,
+-- comprobantes y productos destacados (ver migración 0002)
+-- ============================================================
+
+-- Información completa del negocio / tienda online
+alter table store_settings add column if not exists business_description text;
+alter table store_settings add column if not exists business_hours text;
+alter table store_settings add column if not exists business_email text;
+alter table store_settings add column if not exists social_facebook text;
+alter table store_settings add column if not exists social_instagram text;
+alter table store_settings add column if not exists social_tiktok text;
+alter table store_settings add column if not exists banner_url text;
+alter table store_settings add column if not exists announcement text;
+
+-- Cuentas bancarias / métodos de cobro (varios, administrables).
+-- NUNCA guardar CVV, NIP ni contraseñas bancarias.
+create table if not exists payment_methods (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  kind text not null default 'transfer' check (kind in ('transfer','card','other')),
+  bank_name text,
+  holder_name text,
+  clabe text,
+  account_number text,
+  card_number text,
+  instructions text,
+  image_url text,
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table payment_methods enable row level security;
+
+-- Productos destacados en la tienda online
+alter table products add column if not exists featured boolean not null default false;
+
+-- Estado de pago "en revisión" (comprobante de transferencia adjuntado)
+do $$
+declare c record;
+begin
+  for c in
+    select conname from pg_constraint
+    where conrelid = 'public.orders'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%payment_status%'
+  loop
+    execute format('alter table public.orders drop constraint %I', c.conname);
+  end loop;
+end $$;
+alter table orders drop constraint if exists orders_payment_status_check;
+alter table orders
+  add constraint orders_payment_status_check
+  check (payment_status in ('pending','review','paid','rejected','cancelled','refunded'));
+
+-- order_number como folio legible 'D-XXXXXX' (la tabla original lo creó
+-- bigint identity; se convierte y se crea el trigger generador)
+alter table orders alter column order_number drop identity if exists;
+alter table orders alter column order_number drop default;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders'
+      and column_name = 'order_number' and data_type = 'bigint'
+  ) then
+    alter table orders alter column order_number type text using order_number::text;
+  end if;
+end $$;
+update orders
+set order_number = case
+    when payment_reference ~ '^D-[0-9A-Fa-f]{6}$' then upper(payment_reference)
+    else 'D-' || upper(substr(replace(id::text, '-', ''), 1, 6))
+  end
+where order_number is null or order_number !~ '^D-[0-9A-Fa-f]{6}$';
+create or replace function orders_set_order_number()
+returns trigger language plpgsql as $$
+begin
+  if new.order_number is null then
+    if new.payment_reference ~ '^D-[0-9A-Fa-f]{6}$' then
+      new.order_number := upper(new.payment_reference);
+    else
+      new.order_number := 'D-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_orders_order_number on orders;
+create trigger trg_orders_order_number
+  before insert on orders
+  for each row execute function orders_set_order_number();

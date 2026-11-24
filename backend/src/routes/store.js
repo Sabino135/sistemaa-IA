@@ -24,17 +24,47 @@ async function getSettings() {
   return created;
 }
 
+// Cuentas de cobro activas (transferencias/tarjetas) para mostrar al cliente.
+// Solo expone los campos necesarios para pagar; nunca CVV ni credenciales.
+async function getPaymentAccounts() {
+  try {
+    const { data, error } = await supabase
+      .from('payment_methods')
+      .select('id, name, kind, bank_name, holder_name, clabe, account_number, card_number, instructions, image_url, sort_order')
+      .eq('active', true)
+      .order('sort_order', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    // Si la tabla aún no existe (migración pendiente), la tienda sigue
+    // funcionando con los datos bancarios legacy de store_settings.
+    console.warn('[store/settings] payment_methods no disponible:', err.message);
+    return [];
+  }
+}
+
 // GET /api/store/settings — configuración pública (sin secretos)
 router.get('/settings', async (req, res) => {
   try {
     const s = await getSettings();
+    const accounts = await getPaymentAccounts();
     res.json({
       store_name: s.store_name,
       store_tagline: s.store_tagline,
       logo_url: s.logo_url,
+      banner_url: s.banner_url || null,
+      announcement: s.announcement || null,
+      business_description: s.business_description || null,
+      business_hours: s.business_hours || null,
       phone: s.phone,
       whatsapp: s.whatsapp,
+      email: s.business_email || null,
       address: s.address,
+      social: {
+        facebook: s.social_facebook || null,
+        instagram: s.social_instagram || null,
+        tiktok: s.social_tiktok || null
+      },
       delivery_enabled: s.delivery_enabled,
       pickup_enabled: s.pickup_enabled,
       delivery_fee: Number(s.delivery_fee || 0),
@@ -46,6 +76,7 @@ router.get('/settings', async (req, res) => {
         account_number: s.bank_account_number,
         instructions: s.transfer_instructions
       },
+      payment_accounts: accounts,
       payment_methods: {
         cash: s.cash_enabled,
         transfer: s.transfer_enabled,
@@ -103,12 +134,22 @@ router.post('/delivery/check', async (req, res) => {
 // GET /api/store/products — catálogo público (solo activos y con precio)
 router.get('/products', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const cols = 'id, name, description, price, image_url, category_id, featured, categories(name)';
+    let { data, error } = await supabase
       .from('products')
-      .select('id, name, description, price, image_url, category_id, categories(name)')
+      .select(cols)
       .eq('active', true)
       .not('price', 'is', null)
       .order('name');
+    // Si la migración 0002 aún no se aplica, 'featured' no existe: reintentar sin ella.
+    if (error) {
+      ({ data, error } = await supabase
+        .from('products')
+        .select('id, name, description, price, image_url, category_id, categories(name)')
+        .eq('active', true)
+        .not('price', 'is', null)
+        .order('name'));
+    }
     if (error) throw error;
     res.json(data);
   } catch (err) {
@@ -357,6 +398,55 @@ router.get('/orders/:id', async (req, res) => {
   } catch (err) {
     console.error('[store/orders GET]', err);
     res.status(500).json({ error: 'Error al consultar el pedido' });
+  }
+});
+
+// PUT /api/store/orders/:id/proof — el cliente adjunta su comprobante de
+// transferencia. Autorización: token de invitado (?token=), dueño de la
+// cuenta (Bearer) o staff/admin. Al adjuntarlo, un pago 'pending' de
+// transferencia pasa a 'review' para que el admin lo verifique.
+router.put('/orders/:id/proof', async (req, res) => {
+  try {
+    const proofUrl = String(req.body?.proof_url || '').trim();
+    const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+    const allowedPrefix = `${supabaseUrl}/storage/v1/object/public/payment-proofs/`;
+    if (!proofUrl.startsWith(allowedPrefix)) {
+      return res.status(400).json({ error: 'URL de comprobante inválida' });
+    }
+
+    const { data: order, error: fErr } = await supabase
+      .from('orders').select('id, user_id, guest_token, payment_method, payment_status, payment_proof_url')
+      .eq('id', req.params.id).maybeSingle();
+    if (fErr) throw fErr;
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado' });
+
+    // Autorización: token de invitado, dueño de la cuenta o staff.
+    let authorized = req.query.token && req.query.token === order.guest_token;
+    const header = req.headers.authorization || '';
+    const bearer = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!authorized && bearer) {
+      try {
+        const { resolveUser } = require('../middleware/auth');
+        const u = await resolveUser(bearer);
+        if (u && (u.id === order.user_id || ['admin', 'cajero', 'inventario'].includes(u.role))) authorized = true;
+      } catch { /* sin acceso */ }
+    }
+    if (!authorized) return res.status(403).json({ error: 'No tienes acceso a este pedido' });
+    if (order.payment_status === 'paid') {
+      return res.status(400).json({ error: 'Este pedido ya está pagado' });
+    }
+
+    const update = { payment_proof_url: proofUrl, updated_at: new Date().toISOString() };
+    if (order.payment_method === 'transfer' && order.payment_status === 'pending') {
+      update.payment_status = 'review';
+    }
+    const { data, error } = await supabase
+      .from('orders').update(update).eq('id', order.id).select('*').single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error('[store/orders proof]', err);
+    res.status(500).json({ error: 'Error al guardar el comprobante' });
   }
 });
 

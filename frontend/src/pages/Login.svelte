@@ -65,7 +65,7 @@
         <p class="muted">Accede al panel de administración de tu restaurante.</p>
       {:else if mode === 'register'}
         <h1>Crear cuenta</h1>
-        <p class="muted">Regístrate para acceder al panel de administración de tu restaurante.</p>
+        <p class="muted">Crea tu cuenta. El personal del negocio es dado de alta por un administrador.</p>
       {:else}
         <h1>Recuperar contraseña</h1>
         <p class="muted">Ingresa tu correo y te enviaremos un enlace para restablecerla.</p>

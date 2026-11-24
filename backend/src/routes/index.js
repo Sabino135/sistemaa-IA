@@ -11,6 +11,7 @@ const { router: storeRoutes } = require('./store');
 const orderRoutes = require('./orders');
 const usersRoutes = require('./users');
 const deliveryZonesRoutes = require('./delivery-zones');
+const paymentMethodsRoutes = require('./payment-methods');
 const storeWebhookRoutes = require('./store-webhooks');
 
 const router = express.Router();
@@ -26,6 +27,7 @@ router.use('/store/webhooks', storeWebhookRoutes);
 router.use('/store', storeRoutes);
 router.use('/orders', orderRoutes);
 router.use('/delivery-zones', deliveryZonesRoutes);
+router.use('/payment-methods', paymentMethodsRoutes);
 
 // CRUDs protegidos: cualquier miembro del equipo puede LEER;
 // las escrituras (POST/PUT/DELETE) exigen rol según writeRoles
@@ -52,7 +54,7 @@ router.use('/categories', authedCrud({
 router.use('/products', authedCrud({
   tabla: 'products',
   select: '*, categories(name)',
-  updatable: ['name', 'description', 'price', 'cost', 'category_id', 'image_url', 'active', 'track_inventory']
+  updatable: ['name', 'description', 'price', 'cost', 'category_id', 'image_url', 'active', 'track_inventory', 'featured']
 }));
 
 router.use('/ingredients', authedCrud({

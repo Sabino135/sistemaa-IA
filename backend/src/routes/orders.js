@@ -9,10 +9,16 @@ const ordersWrite = roleOnly('admin', 'cajero');
 const settingsWrite = roleOnly('admin');
 
 const ORDER_STATUSES = ['received', 'preparing', 'ready', 'on_the_way', 'delivered', 'cancelled'];
-const PAYMENT_STATUSES = ['pending', 'paid', 'rejected', 'cancelled', 'refunded'];
+const PAYMENT_STATUSES = ['pending', 'review', 'paid', 'rejected', 'cancelled', 'refunded'];
 // sales.payment_method solo admite cash/card/transfer; Mercado Pago se
 // registra como 'card' (cobro plástico/en línea) en la venta interna.
 const SALE_PAYMENT_MAP = { mercadopago: 'card', transfer: 'transfer', cash: 'cash' };
+
+// Columnas agregadas por la migración 20261124_0002 (pueden no existir aún)
+const NEW_SETTING_KEYS = [
+  'banner_url', 'announcement', 'business_description', 'business_hours',
+  'business_email', 'social_facebook', 'social_instagram', 'social_tiktok'
+];
 
 // Convierte un pedido web entregado en venta POS + descuento de inventario.
 // Idempotente: si el pedido ya tiene sale_id, no hace nada.
@@ -121,7 +127,10 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', settingsWrite, async (req, res) => {
   try {
     const allowed = [
-      'store_name', 'store_tagline', 'logo_url', 'phone', 'whatsapp', 'address',
+      'store_name', 'store_tagline', 'logo_url', 'banner_url', 'announcement',
+      'business_description', 'business_hours', 'business_email',
+      'social_facebook', 'social_instagram', 'social_tiktok',
+      'phone', 'whatsapp', 'address',
       'delivery_enabled', 'pickup_enabled', 'delivery_fee', 'delivery_zones',
       'bank_name', 'bank_account_name', 'bank_clabe', 'bank_account_number',
       'transfer_instructions', 'cash_enabled', 'transfer_enabled', 'mercadopago_enabled'
@@ -129,8 +138,23 @@ router.put('/settings', settingsWrite, async (req, res) => {
     const body = {};
     for (const k of allowed) if (req.body[k] !== undefined) body[k] = req.body[k];
     body.updated_at = new Date().toISOString();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('store_settings').update(body).eq('id', 1).select('*').single();
+    // Si la migración 0002 aún no se aplica, las columnas nuevas no existen
+    // y PostgREST rechaza TODO el update. Reintentamos solo con las columnas
+    // base para no dejar al admin sin poder guardar la configuración.
+    if (error) {
+      const baseKeys = allowed.filter(k => !NEW_SETTING_KEYS.includes(k));
+      const fallback = {};
+      for (const k of baseKeys) if (body[k] !== undefined) fallback[k] = body[k];
+      fallback.updated_at = body.updated_at;
+      ({ data, error } = await supabase
+        .from('store_settings').update(fallback).eq('id', 1).select('*').single());
+      if (!error) {
+        console.warn('[orders settings PUT] columnas nuevas ignoradas (migración 0002 pendiente)');
+        return res.json({ ...data, _pending_migration: true });
+      }
+    }
     if (error) throw error;
     res.json(data);
   } catch (err) {

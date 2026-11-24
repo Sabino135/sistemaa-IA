@@ -25,7 +25,9 @@
     if (sort === 'price_asc') return Number(a.price || 0) - Number(b.price || 0);
     if (sort === 'price_desc') return Number(b.price || 0) - Number(a.price || 0);
     if (sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'es');
-    return 0;
+    // 'destacados': primero los marcados como featured, luego por nombre
+    if (!!b.featured !== !!a.featured) return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
+    return String(a.name || '').localeCompare(String(b.name || ''), 'es');
   });
   $: subtotal = $cart.reduce((a, i) => a + i.price * i.quantity, 0);
   $: tax = subtotal * 0.16;
@@ -51,10 +53,11 @@
   function scrollToMenu() { document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 </script>
 
-<section class="store-hero">
+<section class="store-hero" style={($storeSettings?.banner_url) ? `background-image:linear-gradient(rgba(10,15,28,.72),rgba(10,15,28,.82)),url(${$storeSettings.banner_url});background-size:cover;background-position:center` : ''}>
   <div>
     <h1>{$storeSettings?.store_name || 'Daenerys'}</h1>
     <p>{$storeSettings?.store_tagline || 'Hamburguesas · Burritos · Carne asada'}</p>
+    {#if $storeSettings?.business_description}<p class="muted" style="margin-top:8px;font-size:14px">{$storeSettings.business_description}</p>{/if}
     <div class="flex" style="margin-top:14px;flex-wrap:wrap">
       <button on:click={scrollToMenu}>Ver menú</button>
       <WhatsAppButton phone={storePhone} label="Pedir por WhatsApp" secondary={false} />
@@ -100,6 +103,7 @@
             {/if}
             <div class="store-card-body">
               {#if p.categories?.name}<div class="muted store-cat-label">{p.categories.name}</div>{/if}
+              {#if p.featured}<span class="badge ok" style="font-size:10px;align-self:flex-start">Destacado</span>{/if}
               <strong>{p.name}</strong>
               {#if p.description}<p class="muted store-desc">{p.description}</p>{/if}
               <div class="flex" style="justify-content:space-between;align-items:center;margin-top:auto;padding-top:8px">

@@ -22,7 +22,7 @@ async function main() {
 
   // 1. Usuario admin vía Supabase Auth (contraseña: admin123 — cambiar en producción)
   const { data: created, error: authErr } = await supabase.auth.admin.createUser({
-    email: 'admin@negocio.com',
+    email: 'admin@daenerys.com',
     password: 'admin123',
     email_confirm: true,
     user_metadata: { name: 'Administrador' }
@@ -33,7 +33,7 @@ async function main() {
   let adminId = created?.user?.id;
   if (!adminId) {
     const { data: list } = await supabase.auth.admin.listUsers();
-    adminId = list?.users?.find(u => u.email === 'admin@negocio.com')?.id;
+    adminId = list?.users?.find(u => u.email === 'admin@daenerys.com')?.id;
   }
   if (adminId) {
     // El perfil se crea/actualiza automáticamente en GET /api/auth/me;
@@ -42,7 +42,7 @@ async function main() {
       await supsert('users', [{
         id: adminId,
         name: 'Administrador',
-        email: 'admin@negocio.com',
+        email: 'admin@daenerys.com',
         role: 'admin',
         active: true
       }]);
@@ -53,7 +53,7 @@ async function main() {
 
   // 1b. Cliente demo de la tienda online (rol 'cliente', no entra al panel)
   const { data: createdClient, error: clientAuthErr } = await supabase.auth.admin.createUser({
-    email: 'cliente@negocio.com',
+    email: 'cliente@daenerys.com',
     password: 'cliente123',
     email_confirm: true,
     user_metadata: { name: 'Cliente Demo', is_customer: true }
@@ -64,14 +64,14 @@ async function main() {
     let clientId = createdClient?.user?.id;
     if (!clientId) {
       const { data: list } = await supabase.auth.admin.listUsers();
-      clientId = list?.users?.find(u => u.email === 'cliente@negocio.com')?.id;
+      clientId = list?.users?.find(u => u.email === 'cliente@daenerys.com')?.id;
     }
     if (clientId) {
       try {
         await upsert('users', [{
           id: clientId,
           name: 'Cliente Demo',
-          email: 'cliente@negocio.com',
+          email: 'cliente@daenerys.com',
           role: 'cliente',
           active: true
         }]);
@@ -210,7 +210,7 @@ async function main() {
   // Cliente demo
   await upsert('customers', [{ name: 'Cliente Mostrador', phone: '', email: '', active: true }], 'name');
 
-  console.log('\nListo. Panel: admin@negocio.com / admin123 · Tienda: cliente@negocio.com / cliente123');
+  console.log('\nListo. Panel: admin@daenerys.com / admin123 · Tienda: cliente@daenerys.com / cliente123');
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
