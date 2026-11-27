@@ -526,18 +526,23 @@ begin
 end $$;
 update orders
 set order_number = case
-    when payment_reference ~ '^D-[0-9A-Fa-f]{6}$' then upper(payment_reference)
+    when payment_reference ~ '^[A-Za-z]+-[0-9A-Fa-f]{6}$' then upper(payment_reference)
     else 'D-' || upper(substr(replace(id::text, '-', ''), 1, 6))
   end
-where order_number is null or order_number !~ '^D-[0-9A-Fa-f]{6}$';
+where order_number is null or order_number !~ '^[A-Za-z]+-[0-9A-Fa-f]{6}$';
 create or replace function orders_set_order_number()
 returns trigger language plpgsql as $$
+declare
+  v_prefix text := 'D-';
 begin
   if new.order_number is null then
-    if new.payment_reference ~ '^D-[0-9A-Fa-f]{6}$' then
+    select coalesce(nullif(order_prefix, ''), 'D-') into v_prefix
+      from store_settings where id = 1;
+    v_prefix := coalesce(v_prefix, 'D-');
+    if new.payment_reference ~ '^[A-Za-z]+-[0-9A-Fa-f]{6}$' then
       new.order_number := upper(new.payment_reference);
     else
-      new.order_number := 'D-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+      new.order_number := v_prefix || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
     end if;
   end if;
   return new;
@@ -546,3 +551,66 @@ drop trigger if exists trg_orders_order_number on orders;
 create trigger trg_orders_order_number
   before insert on orders
   for each row execute function orders_set_order_number();
+
+-- ============================================================
+-- MIGRACIÓN 0004 — Historial de pedidos, registro de actividad
+-- administrativa y configuración general de la tienda.
+-- ============================================================
+
+create table if not exists order_status_history (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders(id) on delete cascade,
+  field text not null check (field in ('status','payment_status')),
+  from_value text,
+  to_value text not null,
+  changed_by uuid references users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table order_status_history enable row level security;
+create index if not exists idx_order_history_order on order_status_history(order_id, created_at desc);
+
+create table if not exists activity_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete set null,
+  user_email text,
+  action text not null,
+  entity text,
+  entity_id text,
+  details jsonb,
+  created_at timestamptz not null default now()
+);
+alter table activity_log enable row level security;
+create index if not exists idx_activity_log_created on activity_log(created_at desc);
+create index if not exists idx_activity_log_action on activity_log(action);
+
+alter table store_settings add column if not exists cover_image_url text;
+alter table store_settings add column if not exists theme_color text not null default '#f97316';
+alter table store_settings add column if not exists store_open boolean not null default true;
+alter table store_settings add column if not exists tax_rate numeric(5,4) not null default 0.16;
+alter table store_settings add column if not exists currency text not null default 'MXN';
+alter table store_settings add column if not exists timezone text not null default 'America/Mexico_City';
+alter table store_settings add column if not exists order_prefix text not null default 'D-';
+alter table store_settings add column if not exists prep_time_minutes integer not null default 20;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values
+  ('store-assets', 'store-assets', true, 5242880,
+   array['image/png','image/jpeg','image/webp','image/gif','image/svg+xml'])
+on conflict (id) do nothing;
+
+drop policy if exists "store-assets staff insert" on storage.objects;
+drop policy if exists "store-assets staff update" on storage.objects;
+drop policy if exists "store-assets staff delete" on storage.objects;
+
+create policy "store-assets staff insert" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'store-assets');
+
+create policy "store-assets staff update" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'store-assets')
+  with check (bucket_id = 'store-assets');
+
+create policy "store-assets staff delete" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'store-assets');

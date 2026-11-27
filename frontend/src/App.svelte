@@ -60,6 +60,7 @@
   const ROLE_LABELS = { admin: 'Administrador', cajero: 'Cajero', inventario: 'Inventario' };
 
   $: current = $route.split('?')[0] || '/';
+  $: isStaff = !!$user && $user.role !== 'cliente';
   $: isCustomer = $user?.role === 'cliente';
   // La tienda online y el rastreo de pedidos son públicos (no requieren login).
   // '/' muestra la tienda a visitantes; el personal entra al panel por /login.
@@ -75,8 +76,10 @@
 
   onMount(async () => {
     const unsub = onAuthChange((event) => {
-      if (event === 'SIGNED_IN' && isLogin) navigate('/dashboard');
-      if (event === 'SIGNED_OUT' && !isLogin) navigate('/login');
+      if (event === 'SIGNED_IN' && isLogin) navigate($user?.role === 'cliente' ? '/tienda' : '/dashboard');
+      // Al cerrar sesión se vuelve a la portada pública de la tienda;
+      // el personal puede entrar al panel desde "Acceso personal".
+      if (event === 'SIGNED_OUT' && !isLogin) navigate('/');
     });
     await initAuth();
     if ($user?.role === 'cliente' && !current.startsWith('/tienda') && !current.startsWith('/pedido')) navigate('/tienda');

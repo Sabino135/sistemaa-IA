@@ -2,6 +2,7 @@ const { supabase } = require('../db/supabase');
 const express = require('express');
 const { staffRequired, roleOnly } = require('../middleware/auth');
 const { getSettings } = require('./store');
+const { logActivity } = require('../lib/activity');
 
 const router = express.Router();
 router.use(staffRequired);
@@ -18,6 +19,12 @@ const SALE_PAYMENT_MAP = { mercadopago: 'card', transfer: 'transfer', cash: 'cas
 const NEW_SETTING_KEYS = [
   'banner_url', 'announcement', 'business_description', 'business_hours',
   'business_email', 'social_facebook', 'social_instagram', 'social_tiktok'
+];
+
+// Columnas agregadas por la migración 20261127_0004 (idem)
+const NEW_SETTING_KEYS_0004 = [
+  'cover_image_url', 'theme_color', 'store_open', 'tax_rate',
+  'currency', 'timezone', 'order_prefix', 'prep_time_minutes'
 ];
 
 // Convierte un pedido web entregado en venta POS + descuento de inventario.
@@ -79,6 +86,30 @@ async function fulfillOrder(order, req, allowNegative) {
   return { sale_id: sale.id, already: false };
 }
 
+// Registra un cambio de estado/pago del pedido en order_status_history
+// y en el registro de actividad administrativa. Falla silenciosa si la
+// migración 0004 aún no está aplicada.
+async function recordOrderChange(req, order, field, toValue) {
+  const fromValue = order[field];
+  if (fromValue === toValue) return;
+  try {
+    await supabase.from('order_status_history').insert({
+      order_id: order.id,
+      field,
+      from_value: fromValue,
+      to_value: toValue,
+      changed_by: req.user.id
+    });
+  } catch (err) {
+    console.warn('[orders] history insert:', err?.message || err);
+  }
+  await logActivity(req, `order.${field}`, 'orders', order.id, {
+    order_number: order.order_number,
+    from: fromValue,
+    to: toValue
+  });
+}
+
 // Revierte la venta generada por un pedido (cancelación)
 async function revertFulfillment(order, req) {
   if (!order.sale_id) return;
@@ -133,7 +164,10 @@ router.put('/settings', settingsWrite, async (req, res) => {
       'phone', 'whatsapp', 'address',
       'delivery_enabled', 'pickup_enabled', 'delivery_fee', 'delivery_zones',
       'bank_name', 'bank_account_name', 'bank_clabe', 'bank_account_number',
-      'transfer_instructions', 'cash_enabled', 'transfer_enabled', 'mercadopago_enabled'
+      'transfer_instructions', 'cash_enabled', 'transfer_enabled', 'mercadopago_enabled',
+      // Configuración general (migración 0004)
+      'cover_image_url', 'theme_color', 'store_open', 'tax_rate',
+      'currency', 'timezone', 'order_prefix', 'prep_time_minutes'
     ];
     const body = {};
     for (const k of allowed) if (req.body[k] !== undefined) body[k] = req.body[k];
@@ -144,7 +178,8 @@ router.put('/settings', settingsWrite, async (req, res) => {
     // y PostgREST rechaza TODO el update. Reintentamos solo con las columnas
     // base para no dejar al admin sin poder guardar la configuración.
     if (error) {
-      const baseKeys = allowed.filter(k => !NEW_SETTING_KEYS.includes(k));
+      const skip = new Set([...NEW_SETTING_KEYS, ...NEW_SETTING_KEYS_0004]);
+      const baseKeys = allowed.filter(k => !skip.has(k));
       const fallback = {};
       for (const k of baseKeys) if (body[k] !== undefined) fallback[k] = body[k];
       fallback.updated_at = body.updated_at;
@@ -156,6 +191,9 @@ router.put('/settings', settingsWrite, async (req, res) => {
       }
     }
     if (error) throw error;
+    await logActivity(req, 'settings.update', 'store_settings', 1, {
+      keys: Object.keys(body).filter(k => k !== 'updated_at')
+    });
     res.json(data);
   } catch (err) {
     console.error('[orders settings PUT]', err);
@@ -163,14 +201,24 @@ router.put('/settings', settingsWrite, async (req, res) => {
   }
 });
 
-// GET /api/orders/:id
+// GET /api/orders/:id — detalle + historial de cambios
 router.get('/:id', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('orders').select('*, order_items(*)').eq('id', req.params.id).maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Pedido no encontrado' });
-    res.json(data);
+    let history = [];
+    try {
+      const { data: h } = await supabase
+        .from('order_status_history')
+        .select('field, from_value, to_value, created_at, changed_by')
+        .eq('order_id', data.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      history = h || [];
+    } catch { /* migración 0004 pendiente */ }
+    res.json({ ...data, history });
   } catch (err) {
     res.status(500).json({ error: 'Error al consultar el pedido' });
   }
@@ -215,6 +263,7 @@ router.put('/:id/status', ordersWrite, async (req, res) => {
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', req.params.id).select('*').single();
     if (error) throw error;
+    await recordOrderChange(req, order, 'status', status);
     res.json(data);
   } catch (err) {
     console.error('[orders status]', err);
@@ -229,11 +278,14 @@ router.put('/:id/payment', ordersWrite, async (req, res) => {
     if (!PAYMENT_STATUSES.includes(payment_status)) {
       return res.status(400).json({ error: 'Estado de pago inválido' });
     }
+    const { data: prev } = await supabase
+      .from('orders').select('id, order_number, payment_status').eq('id', req.params.id).maybeSingle();
     const { data, error } = await supabase
       .from('orders')
       .update({ payment_status, updated_at: new Date().toISOString() })
       .eq('id', req.params.id).select('*').single();
     if (error) throw error;
+    if (prev) await recordOrderChange(req, { ...prev, id: req.params.id }, 'payment_status', payment_status);
     res.json(data);
   } catch (err) {
     console.error('[orders payment]', err);

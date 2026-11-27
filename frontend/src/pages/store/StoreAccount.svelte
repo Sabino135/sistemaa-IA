@@ -29,6 +29,34 @@
   let ordersLoading = false;
   let ordersError = '';
 
+  // Cambio de contraseña propio del cliente
+  let showPwForm = false;
+  let pwCurrent = '';
+  let pwNew = '';
+  let pwConfirm = '';
+  let pwLoading = false;
+  let pwError = '';
+  let pwOk = '';
+
+  async function changePassword(e) {
+    e.preventDefault();
+    pwError = ''; pwOk = '';
+    if (pwNew.length < 8) { pwError = 'La nueva contraseña debe tener al menos 8 caracteres.'; return; }
+    if (pwNew !== pwConfirm) { pwError = 'Las contraseñas nuevas no coinciden.'; return; }
+    pwLoading = true;
+    try {
+      // Verificar la contraseña actual re-autenticando
+      const { error: signErr } = await supabase.auth.signInWithPassword({ email: customer.email, password: pwCurrent });
+      if (signErr) { pwError = 'La contraseña actual es incorrecta.'; pwLoading = false; return; }
+      const { error: updErr } = await supabase.auth.updateUser({ password: pwNew });
+      if (updErr) throw updErr;
+      pwOk = 'Contraseña actualizada correctamente.';
+      pwCurrent = pwNew = pwConfirm = '';
+      showPwForm = false;
+    } catch (err) { pwError = err.message || 'No se pudo cambiar la contraseña.'; }
+    pwLoading = false;
+  }
+
   async function loadOrders() {
     if (!customer) return;
     ordersLoading = true; ordersError = '';
@@ -78,6 +106,7 @@
     customer = null;
     orders = [];
     password = '';
+    navigate('/tienda');
   }
 
   onMount(() => {
@@ -99,11 +128,32 @@
         <h2 style="margin:0">Hola{customer.user_metadata?.name ? ', ' + customer.user_metadata.name : ''}</h2>
         <p class="muted" style="margin:4px 0 0">{customer.email}</p>
       </div>
-      <div class="flex">
+      <div class="flex" style="flex-wrap:wrap">
         <button class="secondary" on:click={() => navigate('/tienda')}>Seguir comprando</button>
+        <button class="secondary" on:click={() => showPwForm = !showPwForm}>Cambiar contraseña</button>
         <button class="secondary" on:click={logout}>Cerrar sesión</button>
       </div>
     </div>
+
+    {#if showPwForm}
+      <div class="card" style="background:var(--panel2);margin-top:14px">
+        <h4 style="margin-top:0">Cambiar contraseña</h4>
+        {#if pwError}<div class="error-msg">{pwError}</div>{/if}
+        {#if pwOk}<div class="info-msg">{pwOk}</div>{/if}
+        <form on:submit={changePassword}>
+          <label for="pw-cur">Contraseña actual</label>
+          <input id="pw-cur" type="password" bind:value={pwCurrent} autocomplete="current-password" required />
+          <label for="pw-new">Nueva contraseña (mín. 8 caracteres)</label>
+          <input id="pw-new" type="password" bind:value={pwNew} minlength="8" autocomplete="new-password" required />
+          <label for="pw-conf">Confirmar nueva contraseña</label>
+          <input id="pw-conf" type="password" bind:value={pwConfirm} minlength="8" autocomplete="new-password" required />
+          <div class="flex">
+            <button type="submit" disabled={pwLoading}>{pwLoading ? 'Guardando…' : 'Actualizar contraseña'}</button>
+            <button type="button" class="secondary" on:click={() => { showPwForm = false; pwError = ''; pwOk = ''; }}>Cancelar</button>
+          </div>
+        </form>
+      </div>
+    {/if}
 
     <h3 style="margin-top:18px">Mis pedidos</h3>
     {#if ordersError}<div class="error-msg">{ordersError}</div>{/if}

@@ -1,6 +1,7 @@
 const { supabase } = require('../db/supabase');
 const express = require('express');
 const { staffRequired, roleOnly } = require('../middleware/auth');
+const { logActivity } = require('../lib/activity');
 
 const router = express.Router();
 router.use(staffRequired);
@@ -73,6 +74,7 @@ router.post('/', roleOnly('admin'), async (req, res) => {
       await supabase.auth.admin.deleteUser(authUser.id).catch(() => {});
       throw pErr;
     }
+    await logActivity(req, 'user.create', 'users', profile.id, { email, role });
     res.status(201).json(profile);
   } catch (err) {
     console.error('[users POST]', err);
@@ -120,6 +122,7 @@ router.put('/:id', roleOnly('admin'), async (req, res) => {
     const { data, error } = await supabase
       .from('users').update(body).eq('id', id).select(SELECT).single();
     if (error) throw error;
+    await logActivity(req, 'user.update', 'users', id, { fields: Object.keys(body) });
     res.json(data);
   } catch (err) {
     console.error('[users PUT]', err);
@@ -136,6 +139,7 @@ router.delete('/:id', roleOnly('admin'), async (req, res) => {
     }
     const { error } = await supabase.from('users').update({ active: false }).eq('id', id);
     if (error) throw error;
+    await logActivity(req, 'user.deactivate', 'users', id);
     res.json({ ok: true });
   } catch (err) {
     console.error('[users DELETE]', err);

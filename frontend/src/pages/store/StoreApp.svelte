@@ -21,7 +21,15 @@
   $: isStaff = !!$user && $user.role !== 'cliente';
 
   onMount(() => {
-    loadStoreSettings().catch(() => {});
+    loadStoreSettings()
+      .then((st) => {
+        // Aplicar color de tema configurado por el admin
+        if (st?.theme_color) {
+          document.documentElement.style.setProperty('--accent', st.theme_color);
+          document.documentElement.style.setProperty('--accent2', st.theme_color);
+        }
+      })
+      .catch(() => {});
   });
 
   function goStore() { navigate('/tienda'); }
@@ -46,12 +54,18 @@
       </button>
       <button class="secondary" on:click={() => navigate('/pedido')}>Rastrear pedido</button>
       <button class="secondary" on:click={() => navigate('/tienda/cuenta')}>Mi cuenta</button>
-      {#if isStaff}<button class="secondary" on:click={goPanel}>Panel</button>{/if}
+      {#if isStaff}<button class="secondary" on:click={goPanel}>Panel</button>
+      {:else if !$user}<button class="secondary" on:click={() => navigate('/login')}>Acceso personal</button>{/if}
     </nav>
   </header>
 
   {#if $storeSettings?.announcement}
     <div class="store-announce">{$storeSettings.announcement}</div>
+  {/if}
+  {#if $storeSettings && $storeSettings.store_open === false}
+    <div class="store-announce" style="background:rgba(239,68,68,.15);border-bottom-color:rgba(239,68,68,.4)">
+      Tienda cerrada temporalmente. Vuelve pronto.
+    </div>
   {/if}
 
   <main class="store-main">

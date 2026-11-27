@@ -5,7 +5,8 @@ const { containsPoint, validCoordinates } = require('../lib/geo');
 
 const router = express.Router();
 
-// Tasa de IVA de la tienda (misma que el POS). Ajustar si cambia el régimen.
+// Tasa de IVA por defecto de la tienda. La configurable vive en
+// store_settings.tax_rate y se aplica en POST /orders.
 const TAX_RATE = 0.16;
 
 function validPhone(p) {
@@ -81,7 +82,16 @@ router.get('/settings', async (req, res) => {
         cash: s.cash_enabled,
         transfer: s.transfer_enabled,
         mercadopago: s.mercadopago_enabled && Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN)
-      }
+      },
+      // Configuración general (migración 0004; tolerante si falta la columna)
+      cover_image_url: s.cover_image_url || null,
+      theme_color: s.theme_color || '#f97316',
+      store_open: s.store_open !== false,
+      tax_rate: Number(s.tax_rate ?? TAX_RATE),
+      currency: s.currency || 'MXN',
+      timezone: s.timezone || 'America/Mexico_City',
+      order_prefix: s.order_prefix || 'D-',
+      prep_time_minutes: Number(s.prep_time_minutes ?? 20)
     });
   } catch (err) {
     console.error('[store/settings]', err);
@@ -179,6 +189,9 @@ router.post('/orders', async (req, res) => {
     }
 
     const settings = await getSettings();
+    if (settings.store_open === false) {
+      return res.status(400).json({ error: 'La tienda está cerrada temporalmente. Intenta más tarde.' });
+    }
     if (delivery_method === 'delivery' && !settings.delivery_enabled) {
       return res.status(400).json({ error: 'La entrega a domicilio no está disponible' });
     }
@@ -216,7 +229,8 @@ router.post('/orders', async (req, res) => {
     }
     subtotal = Math.round(subtotal * 100) / 100;
 
-    const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
+    const taxRate = Number(settings.tax_rate ?? TAX_RATE);
+    const tax = Math.round(subtotal * taxRate * 100) / 100;
 
     // Tarifa de entrega: si hay zonas configuradas y el cliente envió
     // coordenadas, se valida cobertura y se cobra la tarifa de la zona.
@@ -267,7 +281,8 @@ router.post('/orders', async (req, res) => {
       }
     } catch { /* la ficha de cliente es opcional */ }
 
-    const orderNumber = 'D-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+    const orderPrefix = settings.order_prefix || 'D-';
+    const orderNumber = orderPrefix + crypto.randomBytes(3).toString('hex').toUpperCase();
 
     const { data: order, error: oErr } = await supabase
       .from('orders')

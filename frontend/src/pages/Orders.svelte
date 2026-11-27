@@ -15,10 +15,13 @@
   const PAY_METHOD = { mercadopago: 'Mercado Pago', transfer: 'Transferencia', cash: 'Efectivo' };
   const DELIVERY = { delivery: 'A domicilio', pickup: 'Recoger' };
 
+  const FIELD_LABELS = { status: 'Estado', payment_status: 'Pago' };
+
   let orders = [];
   let loading = true;
   let error = '';
-  let detail = null;
+  let detail = null;   // pedido abierto
+  let manage = false;  // true = modo gestión (cambios de estado/pago)
 
   let fStatus = '';
   let fPay = '';
@@ -44,12 +47,19 @@
     loading = false;
   }
 
-  async function openDetail(id) {
-    try { detail = await api(`/orders/${id}`); }
-    catch (e) { error = e.message; }
+  async function openDetail(id, asManage = false) {
+    try {
+      detail = await api(`/orders/${id}`);
+      manage = asManage;
+    } catch (e) { error = e.message; }
   }
 
+  function closeDetail() { detail = null; manage = false; }
+
   async function setStatus(id, status) {
+    if (status === 'cancelled' && detail?.status !== 'cancelled') {
+      if (!confirm(`¿Cancelar el pedido #${detail?.order_number ?? id.slice(0, 8)}? Esta acción no se puede deshacer${detail?.sale_id ? ' y revertirá la venta generada' : ''}.`)) return;
+    }
     try {
       await api(`/orders/${id}/status`, { method: 'PUT', body: { status } });
       if (detail?.id === id) detail = await api(`/orders/${id}`);
@@ -125,7 +135,10 @@
               <td>{fmtMoney(o.total)}</td>
               <td><span class="badge {o.status === 'delivered' ? 'ok' : o.status === 'cancelled' ? 'err' : 'warn'}">{ORDER_STATUS[o.status] || o.status}</span></td>
               <td><span class="badge {o.payment_status === 'paid' ? 'ok' : o.payment_status === 'pending' ? 'warn' : 'err'}">{PAY_STATUS[o.payment_status] || o.payment_status}</span></td>
-              <td><button class="secondary" style="padding:4px 10px;font-size:12px" on:click={() => openDetail(o.id)}>Ver</button></td>
+              <td style="white-space:nowrap">
+                <button class="secondary" style="padding:4px 10px;font-size:12px" on:click={() => openDetail(o.id, false)}>Ver</button>
+                <button style="padding:4px 10px;font-size:12px;margin-left:6px" on:click={() => openDetail(o.id, true)}>Gestionar</button>
+              </td>
             </tr>
           {/each}
         </tbody>
@@ -136,8 +149,8 @@
   {#if detail}
     <div class="card">
       <div class="flex" style="justify-content:space-between">
-        <h3>Pedido #{detail.order_number ?? detail.id.slice(0, 8)}</h3>
-        <button class="secondary" on:click={() => detail = null}>Cerrar</button>
+        <h3>Pedido #{detail.order_number ?? detail.id.slice(0, 8)} {manage ? '· Gestión' : ''}</h3>
+        <button class="secondary" on:click={closeDetail}>Cerrar</button>
       </div>
       <p class="muted">{fmtDate(detail.created_at)}</p>
 
@@ -169,31 +182,54 @@
         <div class="flex" style="justify-content:space-between;font-size:20px"><strong>Total</strong><strong>{fmtMoney(detail.total)}</strong></div>
       </div>
 
-      <h4>Estado del pedido</h4>
-      <div class="flex" style="flex-wrap:wrap;gap:8px">
-        {#each Object.entries(ORDER_STATUS) as [v, l]}
-          <button
-            class={detail.status === v ? '' : 'secondary'}
-            style="padding:6px 12px;font-size:13px"
-            disabled={detail.status === v}
-            on:click={() => setStatus(detail.id, v)}>{l}</button>
-        {/each}
-      </div>
-      {#if detail.sale_id}<p class="muted" style="margin-top:6px">Venta POS vinculada: #{detail.sale_id.slice(0, 8)}</p>{/if}
+      {#if manage}
+        <h4>Estado del pedido</h4>
+        <div class="flex" style="flex-wrap:wrap;gap:8px">
+          {#each Object.entries(ORDER_STATUS) as [v, l]}
+            <button
+              class={detail.status === v ? '' : 'secondary'}
+              style="padding:6px 12px;font-size:13px"
+              disabled={detail.status === v}
+              on:click={() => setStatus(detail.id, v)}>{l}</button>
+          {/each}
+        </div>
+        {#if detail.sale_id}<p class="muted" style="margin-top:6px">Venta POS vinculada: #{detail.sale_id.slice(0, 8)}</p>{/if}
 
-      <h4>Estado del pago</h4>
-      <div class="flex" style="flex-wrap:wrap;gap:8px">
-        {#each Object.entries(PAY_STATUS) as [v, l]}
-          <button
-            class={detail.payment_status === v ? '' : 'secondary'}
-            style="padding:6px 12px;font-size:13px"
-            disabled={detail.payment_status === v}
-            on:click={() => setPayment(detail.id, v)}>{l}</button>
-        {/each}
-      </div>
-      <p class="muted">Método: {PAY_METHOD[detail.payment_method] || detail.payment_method}{#if detail.payment_reference} · Ref: {detail.payment_reference}{/if}</p>
-      {#if detail.payment_proof_url}
-        <p><a href={detail.payment_proof_url} target="_blank" rel="noopener">Ver comprobante de pago</a></p>
+        <h4>Estado del pago</h4>
+        <div class="flex" style="flex-wrap:wrap;gap:8px">
+          {#each Object.entries(PAY_STATUS) as [v, l]}
+            <button
+              class={detail.payment_status === v ? '' : 'secondary'}
+              style="padding:6px 12px;font-size:13px"
+              disabled={detail.payment_status === v}
+              on:click={() => setPayment(detail.id, v)}>{l}</button>
+          {/each}
+        </div>
+        <p class="muted">Método: {PAY_METHOD[detail.payment_method] || detail.payment_method}{#if detail.payment_reference} · Ref: {detail.payment_reference}{/if}</p>
+        {#if detail.payment_proof_url}
+          <p><a href={detail.payment_proof_url} target="_blank" rel="noopener">Ver comprobante de pago</a></p>
+        {/if}
+      {:else}
+        <h4>Pago</h4>
+        <p class="muted">{PAY_STATUS[detail.payment_status] || detail.payment_status} · {PAY_METHOD[detail.payment_method] || detail.payment_method}{#if detail.payment_proof_url} · <a href={detail.payment_proof_url} target="_blank" rel="noopener">Comprobante</a>{/if}</p>
+        <button class="secondary" style="margin-top:8px" on:click={() => { manage = true; }}>Gestionar este pedido</button>
+      {/if}
+
+      {#if detail.history && detail.history.length > 0}
+        <h4>Historial de cambios</h4>
+        <table>
+          <thead><tr><th>Fecha</th><th>Cambio</th><th>De</th><th>A</th></tr></thead>
+          <tbody>
+            {#each detail.history as h}
+              <tr>
+                <td>{fmtDate(h.created_at)}</td>
+                <td>{FIELD_LABELS[h.field] || h.field}</td>
+                <td class="muted">{h.field === 'status' ? (ORDER_STATUS[h.from_value] || h.from_value || '—') : (PAY_STATUS[h.from_value] || h.from_value || '—')}</td>
+                <td><strong>{h.field === 'status' ? (ORDER_STATUS[h.to_value] || h.to_value) : (PAY_STATUS[h.to_value] || h.to_value)}</strong></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       {/if}
     </div>
   {/if}

@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { supabase } from './supabase';
 import { api } from './api';
 
@@ -90,7 +90,8 @@ export async function loginWithEmail(email, password) {
     }
     throw lastProfileError || new Error('No se pudo conectar con el servidor.');
   }
-  navigate('/dashboard');
+  // Un cliente de la tienda nunca entra al panel: va directo a la tienda.
+  navigate(me.role === 'cliente' ? '/tienda' : '/dashboard');
 }
 
 export async function resetPassword(email) {
@@ -130,13 +131,16 @@ export async function registerWithEmail(name, email, password) {
   // Si la confirmación de email está desactivada, hay sesión inmediata
   if (data.session) {
     await fetchProfile();
-    navigate('/dashboard');
+    const me = get(user);
+    navigate(me?.role === 'cliente' ? '/tienda' : '/dashboard');
   }
   return data;
 }
 
 export async function logout() {
+  const me = get(user);
   await supabase.auth.signOut();
   user.set(null);
-  navigate('/login');
+  // Los clientes regresan a la portada de la tienda; el personal al login.
+  navigate(me?.role === 'cliente' ? '/tienda' : '/login');
 }

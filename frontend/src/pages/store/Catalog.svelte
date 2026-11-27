@@ -30,7 +30,8 @@
     return String(a.name || '').localeCompare(String(b.name || ''), 'es');
   });
   $: subtotal = $cart.reduce((a, i) => a + i.price * i.quantity, 0);
-  $: tax = subtotal * 0.16;
+  $: taxRate = Number($storeSettings?.tax_rate ?? 0.16);
+  $: tax = subtotal * taxRate;
   $: total = subtotal + tax;
   $: waMessage = orderWhatsAppMessage({ items: $cart, total });
   $: storePhone = $storeSettings?.whatsapp || $storeSettings?.phone || '';
@@ -53,7 +54,7 @@
   function scrollToMenu() { document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 </script>
 
-<section class="store-hero" style={($storeSettings?.banner_url) ? `background-image:linear-gradient(rgba(10,15,28,.72),rgba(10,15,28,.82)),url(${$storeSettings.banner_url});background-size:cover;background-position:center` : ''}>
+<section class="store-hero" style={(($storeSettings?.cover_image_url || $storeSettings?.banner_url)) ? `background-image:linear-gradient(rgba(10,15,28,.72),rgba(10,15,28,.82)),url(${$storeSettings.cover_image_url || $storeSettings.banner_url});background-size:cover;background-position:center` : ''}>
   <div>
     <h1>{$storeSettings?.store_name || 'Daenerys'}</h1>
     <p>{$storeSettings?.store_tagline || 'Hamburguesas · Burritos · Carne asada'}</p>
@@ -145,7 +146,7 @@
         {/each}
         <div class="checkout-total">
           <div class="flex" style="justify-content:space-between"><span class="muted">Subtotal</span><span>{fmtMoney(subtotal)}</span></div>
-          <div class="flex" style="justify-content:space-between"><span class="muted">IVA (16%)</span><span>{fmtMoney(tax)}</span></div>
+          <div class="flex" style="justify-content:space-between"><span class="muted">IVA ({Math.round(taxRate * 100)}%)</span><span>{fmtMoney(tax)}</span></div>
           <div class="flex" style="justify-content:space-between;font-size:20px"><strong>Total aprox.</strong><strong>{fmtMoney(total)}</strong></div>
           <p class="muted" style="font-size:12px">El envío se calcula en el checkout.</p>
         </div>

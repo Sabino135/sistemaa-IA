@@ -13,6 +13,8 @@ const usersRoutes = require('./users');
 const deliveryZonesRoutes = require('./delivery-zones');
 const paymentMethodsRoutes = require('./payment-methods');
 const storeWebhookRoutes = require('./store-webhooks');
+const activityRoutes = require('./activity');
+const backupRoutes = require('./backup');
 
 const router = express.Router();
 
@@ -28,6 +30,8 @@ router.use('/store', storeRoutes);
 router.use('/orders', orderRoutes);
 router.use('/delivery-zones', deliveryZonesRoutes);
 router.use('/payment-methods', paymentMethodsRoutes);
+router.use('/activity', activityRoutes);
+router.use('/backup', backupRoutes);
 
 // CRUDs protegidos: cualquier miembro del equipo puede LEER;
 // las escrituras (POST/PUT/DELETE) exigen rol según writeRoles

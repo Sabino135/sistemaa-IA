@@ -24,8 +24,9 @@
   let zoneInfo = null;     // {covered, zone_name, delivery_fee}
   let locating = false;
 
+  $: taxRate = Number(settings?.tax_rate ?? 0.16);
   $: subtotal = $cart.reduce((a, i) => a + i.price * i.quantity, 0);
-  $: tax = Math.round(subtotal * 0.16 * 100) / 100;
+  $: tax = Math.round(subtotal * taxRate * 100) / 100;
   $: deliveryFee = form.delivery_method === 'delivery' ? Number(zoneInfo?.delivery_fee ?? settings?.delivery_fee ?? 0) : 0;
   $: total = Math.round((subtotal + tax + deliveryFee) * 100) / 100;
 
@@ -67,6 +68,7 @@
 
   async function submit() {
     error = '';
+    if (settings?.store_open === false) { error = 'La tienda está cerrada temporalmente. Intenta más tarde.'; return; }
     if ($cart.length === 0) { error = 'El carrito está vacío'; return; }
     if (form.customer_name.trim().length < 2) { error = 'Ingresa tu nombre'; return; }
     if (form.customer_phone.replace(/\D/g, '').length < 8) { error = 'Ingresa un teléfono válido'; return; }
@@ -169,7 +171,7 @@
         {/each}
         <div class="checkout-total">
           <div class="flex" style="justify-content:space-between"><span class="muted">Subtotal</span><span>{fmtMoney(subtotal)}</span></div>
-          <div class="flex" style="justify-content:space-between"><span class="muted">IVA (16%)</span><span>{fmtMoney(tax)}</span></div>
+          <div class="flex" style="justify-content:space-between"><span class="muted">IVA ({Math.round(taxRate * 100)}%)</span><span>{fmtMoney(tax)}</span></div>
           {#if form.delivery_method === 'delivery'}
             <div class="flex" style="justify-content:space-between"><span class="muted">Envío{zoneInfo?.zone_name ? ' (' + zoneInfo.zone_name + ')' : ''}</span><span>{fmtMoney(deliveryFee)}</span></div>
           {/if}
