@@ -138,9 +138,9 @@ export async function registerWithEmail(name, email, password) {
 }
 
 export async function logout() {
-  const me = get(user);
   await supabase.auth.signOut();
   user.set(null);
-  // Los clientes regresan a la portada de la tienda; el personal al login.
-  navigate(me?.role === 'cliente' ? '/tienda' : '/login');
+  // Toda sesión cerrada vuelve a la portada de acceso (/); nadie entra
+  // automáticamente a la tienda ni al panel tras cerrar sesión.
+  navigate('/');
 }

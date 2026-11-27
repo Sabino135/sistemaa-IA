@@ -55,7 +55,7 @@
       <button class="secondary" on:click={() => navigate('/pedido')}>Rastrear pedido</button>
       <button class="secondary" on:click={() => navigate('/tienda/cuenta')}>Mi cuenta</button>
       {#if isStaff}<button class="secondary" on:click={goPanel}>Panel</button>
-      {:else if !$user}<button class="secondary" on:click={() => navigate('/login')}>Acceso personal</button>{/if}
+      {:else if !$user}<button class="secondary" on:click={() => navigate('/')}>Acceso personal</button>{/if}
     </nav>
   </header>
 

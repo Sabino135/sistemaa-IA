@@ -62,11 +62,11 @@
   $: current = $route.split('?')[0] || '/';
   $: isStaff = !!$user && $user.role !== 'cliente';
   $: isCustomer = $user?.role === 'cliente';
-  // La tienda online y el rastreo de pedidos son públicos (no requieren login).
-  // '/' muestra la tienda a visitantes; el personal entra al panel por /login.
-  $: isPublicStore = current.startsWith('/tienda') || current.startsWith('/pedido') || isCustomer || (current === '/' && !$user);
+  // La tienda online y el rastreo de pedidos son públicos en sus propias rutas.
+  // '/' es la portada de acceso (login); la tienda vive en /tienda.
+  $: isPublicStore = current.startsWith('/tienda') || current.startsWith('/pedido') || (isCustomer && current !== '/');
   $: Page = pages[current] || Dashboard;
-  $: isLogin = current === '/login';
+  $: isLogin = current === '/login' || current === '/';
   $: loggedIn = !!$user;
   $: role = $user?.role || 'cajero';
   $: visibleNav = NAV.filter(n => !n.roles || n.roles.includes(role));

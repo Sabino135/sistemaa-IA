@@ -1,5 +1,5 @@
 <script>
-  import { loginWithGoogle, loginWithEmail, resetPassword, registerWithEmail } from '../lib/store';
+  import { loginWithGoogle, loginWithEmail, resetPassword, registerWithEmail, navigate } from '../lib/store';
   import Logo from '../lib/Logo.svelte';
 
   let mode = 'login'; // 'login' | 'forgot' | 'register'
@@ -132,6 +132,7 @@
       {/if}
 
       <p class="note">DAENERYS BURGERS &amp; BURRITOS · Punto de Venta y Administración</p>
+      <p class="note"><button type="button" class="link-btn" on:click={() => navigate('/tienda')}>¿Solo quieres ver el menú? Visitar la tienda →</button></p>
     </div>
   </main>
 </div>
